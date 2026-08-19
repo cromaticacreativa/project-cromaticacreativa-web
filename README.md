@@ -27,7 +27,7 @@ El actor público definido por el ERS es el **Cliente**. En esta versión, Clien
 
 Cromática Creativa necesita una presencia web corporativa cuyo contenido dinámico pueda ser gestionado por el Administrador sin desarrollar un panel propio. Directus cubrirá ese backoffice y se conectará directamente a PostgreSQL; Entity Framework Core conservará la autoridad exclusiva sobre el esquema del dominio. Antes de cada mutación administrativa, un Filter Hook bloqueante solicitará a ASP.NET Core que la valide, procese y, cuando corresponda, normalice.
 
-Los Clientes Corporativos mostrados en el portafolio y gestionados conceptualmente por el módulo `CorporateClients` son contenido institucional. No deben confundirse con el actor funcional **Cliente** que consulta el sitio sin autenticación.
+Los Clientes Corporativos mostrados en el portafolio pertenecen al Bounded Context `Portfolio`. No deben confundirse con el actor funcional **Cliente** que consulta el sitio sin autenticación.
 
 ## Tipo de proyecto
 
@@ -53,7 +53,7 @@ Los Clientes Corporativos mostrados en el portafolio y gestionados conceptualmen
 Incluido en la visión inicial:
 
 - Consulta de contenido corporativo por el Cliente, sin autenticación.
-- Proyectos, Clientes Corporativos, servicios, contacto, redes sociales y ubicación.
+- Portafolio de proyectos y Clientes Corporativos, servicios y categorías, perfil corporativo y solicitudes de contacto.
 - Contenido multimedia asociado donde corresponda.
 - Formulario público con motivo de contacto, servicio ofrecido seleccionado y datos suficientes para que la empresa responda al Cliente.
 - Envío de la solicitud por correo mediante ASP.NET Core y un port implementado por Infrastructure, sin participación de Directus.
@@ -78,11 +78,9 @@ Permanece definido en código por su baja frecuencia de cambio:
 
 Se administra dinámicamente mediante Directus. Las lecturas administrativas consultan PostgreSQL directamente; las mutaciones se procesan primero mediante Filter Hooks y casos de uso de ASP.NET Core:
 
-- Proyectos y su multimedia.
-- Clientes Corporativos.
-- Servicios.
-- Información de contacto y redes sociales.
-- Ubicación.
+- Proyectos, su multimedia y Clientes Corporativos de `Portfolio`.
+- Servicios y categorías de `Services`.
+- Información de contacto, redes sociales y ubicación de `CompanyProfile`.
 
 Directus no hace editable todo el sitio. No se creará una entidad `SiteSettings` ni un módulo equivalente únicamente para trasladar a PostgreSQL el contenido institucional estático.
 
@@ -130,11 +128,14 @@ flowchart LR
     form --> api["ASP.NET Core / Presentation"]
     api --> mediator["MediatR"]
     mediator --> handler["Application Command Handler"]
-    handler --> domain["Domain"]
+    handler --> services["Services / public"]
+    handler --> profile["CompanyProfile / public"]
+    handler --> domain["ContactRequest / Domain"]
     handler --> emailPort["Application Email Port"]
     adapter["Infrastructure / Email Adapter"] -. "implementa" .-> emailPort
     adapter --> provider["Proveedor de correo"]
-    provider --> company["Cromática Creativa"]
+    profile --> recipient["ContactRequestRecipientEmail"]
+    provider --> recipient
 ```
 
 Los identificadores Mermaid son únicamente nombres técnicos de nodos. Las líneas punteadas de implementación no indican que Application conozca Infrastructure. React nunca consume Directus. Directus puede consultar PostgreSQL y ejecuta el `INSERT`, `UPDATE` o `DELETE` final, pero solo después de la aprobación del backend. EF Core controla mappings, schema y migrations; ASP.NET Core no realiza una segunda escritura de la misma mutación. El formulario es un flujo público separado: Directus y PostgreSQL no intervienen en su envío.
@@ -145,38 +146,43 @@ La explicación completa y las decisiones vigentes se encuentran en [docs/ARCHIT
 
 Todos los módulos pertenecen a la misma aplicación, se despliegan juntos y utilizan PostgreSQL. Aun así, cada módulo protege su modelo, casos de uso y detalles técnicos. La separación modular busca alta cohesión interna y bajo acoplamiento, sin la complejidad operativa de microservicios.
 
-Módulos conceptuales iniciales:
+Los Bounded Contexts iniciales están definidos:
 
-| Módulo | Responsabilidad inicial | Estado |
+| Bounded Context | Responsabilidad | Modelo principal |
 | --- | --- | --- |
-| `Projects` | Proyectos realizados, publicación y asociaciones relevantes. | Conceptual |
-| `CorporateClients` | Información pública sobre organizaciones clientes con las que ha trabajado Cromática Creativa. | Conceptual |
-| `Services` | Servicios ofrecidos por la empresa. | Conceptual |
-| `Contact` | Información pública de contacto y redes sociales, y casos de uso para que el Cliente envíe una solicitud a la empresa. | Conceptual |
-| `Location` | Ubicación pública administrable. | Conceptual |
+| `Portfolio` | Trabajo realizado y portafolio público. | `Project`, `ProjectMedia`, `CorporateClient` |
+| `Services` | Oferta comercial actual y categorías de trabajo. | `Service`, `ServiceCategory` |
+| `CompanyProfile` | Información administrable para contactar y localizar a la empresa. | `CompanyContactInformation`, `CompanyLocation`, `SocialLink` |
+| `Contact` | Procesamiento de solicitudes enviadas por Clientes. | `ContactRequest` |
 
-Esta lista no es definitiva. Los límites se validarán antes de implementar.
+`Project` y `CorporateClient` pertenecen a `Portfolio`; `CompanyLocation` pertenece a `CompanyProfile`. `Projects`, `CorporateClients`, `Location`, `Categories` y `Media` no son módulos independientes. Tampoco se crearán `Identity`, `Users`, `Site` o `SiteSettings` sin un requisito futuro explícito.
 
-El módulo `CorporateClients` representa contenido corporativo del portafolio; no representa cuentas, autenticación ni perfiles del actor Cliente. La multimedia permanecerá inicialmente dentro de `Projects` mientras no exista lógica suficiente para justificar un módulo propio. No se crearán módulos `Identity`, `Users`, `Site` o `SiteSettings` para requisitos inexistentes o textos estáticos.
+Entre Bounded Contexts se usan contratos mínimos expuestos mediante `public/`; nunca se comparten directamente Entities o Aggregate Roots ni se importa `internal/` ajeno.
 
-Los módulos son candidatos a alinearse con **Bounded Contexts**, pero no se asume que cada carpeta sea automáticamente un contexto independiente. Un Bounded Context se define por un límite semántico, un lenguaje ubicuo y un modelo consistente, no por una tabla o Entity. Entre contextos se usan contratos mínimos; nunca se comparten directamente Entities o Aggregate Roots.
+### Resumen del modelo
+
+- `Portfolio`: `Project` y `CorporateClient` son Aggregate Roots. `ProjectMedia` es una Entity interna controlada por `Project`. El proyecto conserva referencias propias al servicio y categoría, un `ProjectPeriod` cuyo `TotalDays` se deriva de las fechas y un estado de publicación distinto de los estados comerciales.
+- `Services`: `Service` y `ServiceCategory` son Aggregate Roots. Ambos usan estados `Active`/`Inactive`; cada categoría pertenece a un único servicio. Su `ReferenceImage` ilustra el tipo de trabajo y no es multimedia de un proyecto real.
+- `CompanyProfile`: `CompanyContactInformation` es Aggregate Root, `CompanyLocation` es su Entity interna y `SocialLink` es un Value Object. También administra `ContactRequestRecipientEmail`.
+- `Contact`: `ContactRequest` es Aggregate Root para representar una solicitud válida. Esto no obliga a persistirla históricamente en la V1; el envío de correo sigue siendo un efecto de Application.
+
+`Portfolio.Application` valida Service/Category mediante `Services/public/` y crea `ProjectServiceReference` y `ProjectCategoryReference` propios; `Portfolio.Domain` nunca depende de `Services.Domain`. `Contact.Application` consulta `Services/public/` para validar el servicio y `CompanyProfile/public/` para obtener el destinatario.
 
 ## Estructura general del repositorio
 
-La única estructura física existente en esta fase es la documentación. La estructura objetivo aproximada es:
+La fundación física inicial del backend ya existe. La solución usa proyectos separados por capa dentro de cada Bounded Context:
 
 ```text
 /
 ├── frontend/                       # Conceptual; aún no creado
-├── backend/                        # Conceptual; aún no creado
-│   ├── src/
-│   │   └── modules/
-│   │       ├── projects/
-│   │       ├── corporate-clients/
-│   │       ├── services/
-│   │       ├── contact/
-│   │       └── location/
-│   └── tests/
+├── backend/
+│   ├── CromaticaCreativa.sln
+│   ├── Directory.Build.props
+│   └── modules/
+│       ├── Portfolio/
+│       ├── Services/
+│       ├── CompanyProfile/
+│       └── Contact/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── CONVENTIONS.md
@@ -185,62 +191,36 @@ La única estructura física existente en esta fase es la documentación. La est
 │   ├── ENDPOINTS.md
 │   └── ROADMAP.md
 ├── AGENTS.md
+├── global.json
 └── README.md
 ```
 
-Los nombres de soluciones, proyectos `.csproj`, namespaces y carpetas definitivas se decidirán al crear la fundación técnica; no quedan fijados por este árbol conceptual.
+Cada carpeta de Bounded Context contiene proyectos `{Context}.Domain`, `{Context}.Application`, `{Context}.Infrastructure` y `{Context}.Presentation`, con el prefijo `CromaticaCreativa.Modules`. El namespace raíz aprobado es `CromaticaCreativa.Modules`. Solo los proyectos Domain contienen implementación funcional en esta fase.
 
 ## Estructura de los módulos
 
-Cada módulo expondrá contratos internos al monolito mediante `public/` y mantendrá su implementación en `internal/`:
+Cada módulo separa las capas mediante proyectos `.csproj`, lo que permite restringir las dependencias con referencias de proyecto:
 
 ```mermaid
-flowchart TD
-    module["Module"] --> public["public"]
-    module --> internal["internal"]
-    public --> contracts["contracts"]
-    public --> dtos["dtos"]
-    public --> events["events"]
-    internal --> domain["domain"]
-    internal --> application["application"]
-    application --> commands["commands"]
-    application --> queries["queries"]
-    application --> ports["ports"]
-    internal --> infrastructure["infrastructure"]
-    internal --> presentation["presentation"]
+flowchart LR
+    presentation["Presentation.csproj"] --> application["Application.csproj"]
+    application --> domain["Domain.csproj"]
+    infrastructure["Infrastructure.csproj"] --> application
+    infrastructure --> domain
 ```
 
 ```text
 modules/
-└── projects/
-    ├── public/
-    │   ├── contracts/
-    │   ├── dtos/
-    │   └── events/
-    └── internal/
-        ├── domain/
-        │   ├── entities/
-        │   ├── aggregates/
-        │   ├── value-objects/
-        │   ├── services/
-        │   ├── events/
-        │   ├── exceptions/
-        │   └── abstractions/
-        ├── application/
-        │   ├── commands/
-        │   │   └── UseCase/
-        │   │       ├── UseCaseCommand.cs
-        │   │       └── UseCaseCommandHandler.cs
-        │   ├── queries/
-        │   │   └── UseCase/
-        │   │       ├── UseCaseQuery.cs
-        │   │       └── UseCaseQueryHandler.cs
-        │   └── ports/
-        ├── infrastructure/
-        │   ├── persistence/
-        │   ├── time/
-        │   └── email/
-        └── presentation/
+└── Portfolio/
+    ├── CromaticaCreativa.Modules.Portfolio.Domain/
+    │   ├── Aggregates/
+    │   ├── Entities/
+    │   ├── Enums/
+    │   ├── Exceptions/
+    │   └── ValueObjects/
+    ├── CromaticaCreativa.Modules.Portfolio.Application/
+    ├── CromaticaCreativa.Modules.Portfolio.Infrastructure/
+    └── CromaticaCreativa.Modules.Portfolio.Presentation/
 ```
 
 - `Domain`: Entities, Aggregate Roots, Value Objects, Domain Events, invariantes, servicios y excepciones exclusivamente de negocio.
@@ -248,9 +228,9 @@ modules/
 - `Infrastructure`: EF Core, persistencia, PostgreSQL, tiempo del sistema, correo, almacenamiento e implementaciones de ports.
 - `Presentation`: adaptadores HTTP, mapping y códigos de respuesta.
 
-`public/` significa API pública entre módulos dentro del monolito; no implica exposición HTTP.
+Los proyectos Application, Infrastructure y Presentation existen estructuralmente, pero no contienen lógica funcional ni referencias anticipadas. Las referencias se agregarán solo cuando un caso real las necesite y deberán respetar `Application → Domain`, `Presentation → Application` e `Infrastructure → Application/Domain`.
 
-El árbol es conceptual: `UseCase` no es un nombre literal y ninguna carpeta se crea hasta contener una responsabilidad real. Cada caso de uso agrupa su mensaje, Handler y, solo si son cohesivos, sus DTOs o validadores. Se evitan archivos masivos como `Commands.cs` o `Handlers.cs`. `domain/abstractions/` se reserva para contratos cuyo significado pertenece genuinamente al dominio; los recursos externos requeridos por un caso de uso —tiempo, correo, storage, read stores o gateways— se expresan normalmente como ports de Application.
+Los contratos públicos entre Bounded Contexts todavía no se materializan: se crearán únicamente cuando una historia de usuario tenga un consumidor real. `public` seguirá significando API entre módulos dentro del monolito y no exposición HTTP. Las carpetas Domain solo existen cuando contienen tipos reales; no se crearon `Events`, `Services` o `Abstractions` vacías.
 
 ## Comunicación entre módulos
 
@@ -260,7 +240,7 @@ Los DTOs, contratos/facades e Integration Events públicos deben ser explícitos
 
 ## Backend
 
-El backend usará C#, .NET y ASP.NET Core Web API con Dependency Injection nativa. No se ha decidido todavía la versión de .NET, el nombre de la solución, la organización física de proyectos ni el uso de Controllers frente a Minimal APIs.
+El backend usa C# sobre .NET 10 (`net10.0`), fijado al SDK `10.0.302` mediante `global.json`. La solución es `backend/CromaticaCreativa.sln`, el namespace raíz es `CromaticaCreativa.Modules` y cada Bounded Context dispone de un proyecto por capa. El host ASP.NET Core y la decisión entre Controllers y Minimal APIs todavía no se han implementado.
 
 Los adaptadores HTTP delegarán en MediatR y no contendrán lógica de negocio. Presentation atenderá la API pública para consultas y envío del formulario, además de la API interna invocada por Filter Hooks. Domain no dependerá de ASP.NET Core, EF Core, PostgreSQL, Directus, MediatR, HTTP ni proveedores de correo.
 
@@ -302,7 +282,7 @@ Command / Query → Handler
              └── Infrastructure implementa
 ```
 
-La consulta pública usará principalmente Queries y read ports con proyecciones directas; no cargará Aggregates solo por simetría. El envío del formulario es una acción y se modelará como un Command conceptual —por ejemplo, `SubmitContactRequestCommand` o `SendContactRequestCommand`, con nombre definitivo pendiente— que valida la solicitud, usa Domain cuando existan reglas reales e invoca un port de correo; una Query nunca envía correos. Las mutaciones administrativas procedentes de Filter Hooks también requerirán Commands para recuperar estado actual mediante ports, invocar comportamiento de Domain, rechazar la intención o devolver un payload canónico. El Command administrativo no debe ejecutar la persistencia final de esa misma mutación mediante `SaveChanges`; Directus la realiza después de recibir la aprobación. Todos los nombres citados son ejemplos conceptuales, no casos de uso ni endpoints implementados.
+La consulta pública usará principalmente Queries y read ports con proyecciones directas; no cargará Aggregates solo por simetría. El envío del formulario es una acción y se representa conceptualmente mediante `SubmitContactRequestCommand`, que valida la solicitud, usa Domain e invoca un port de correo; una Query nunca envía correos. Las mutaciones administrativas procedentes de Filter Hooks también requerirán Commands para recuperar estado actual mediante ports, invocar comportamiento de Domain, rechazar la intención o devolver un payload canónico. El Command administrativo no debe ejecutar la persistencia final de esa misma mutación mediante `SaveChanges`; Directus la realiza después de recibir la aprobación. Estos nombres son conceptuales y no declaran código ni endpoints implementados.
 
 Los Request DTOs se mapean a Commands o Queries y las respuestas se proyectan a Response DTOs. Las Entities de Domain no cruzan directamente la frontera HTTP.
 
@@ -353,19 +333,23 @@ Las Pages y los componentes visuales no ejecutan requests dispersos ni conocen E
 
 En el formulario, `ContactPage` compone la feature de contacto; un hook conceptual como `useContactForm` solo se justifica si encapsula estado o comportamiento React; y el service/API client envía la solicitud a ASP.NET Core. React puede validar para UX, pero el backend vuelve a validar todo. React nunca envía correo directamente ni conoce credenciales, destinatarios internos o configuración del proveedor.
 
+Funcionalmente, la página de servicios podrá presentar cada `Service` activo con sus categorías activas, incluyendo nombre, descripción y `ReferenceImage`. La página de portafolio podrá filtrar Projects publicados por Service y ServiceCategory. El detalle de un Project podrá mostrar título, descripción, Cliente Corporativo, servicio, categoría y `ProjectMedia`. `ProjectPeriod` existe en Domain, pero sigue pendiente decidir si la API/UI expondrá fechas, duración o ninguna de ellas.
+
 ## Base de datos
 
-PostgreSQL será la base principal. **Entity Framework Core es el propietario del esquema** y será responsable del mapping, `DbContext`, configuraciones de entidades, migrations y evolución estructural.
+PostgreSQL será la base principal. **Entity Framework Core es el propietario del esquema** y es responsable de los Persistence Models, `DbContext`, configuraciones, migrations y evolución estructural. El modelo relacional está separado del modelo de Domain; ningún Aggregate Root o Value Object se configura directamente como entidad EF Core.
 
 ```mermaid
 flowchart TD
-    model["Domain Model"] --> configuration["EF Core Configuration"]
+    domain["Domain Model"] <--> mapper["Persistence Mapper"]
+    mapper <--> model["Persistence Models"]
+    model --> configuration["EF Core Configuration"]
     configuration --> migration["EF Core Migration"]
     migration --> database[("PostgreSQL")]
     database --> introspection["Directus introspecciona el esquema existente"]
 ```
 
-Entity Framework Core controla y versiona el esquema del dominio. PostgreSQL aplicará `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `FOREIGN KEY`, `CHECK`, índices y comportamientos explícitos de eliminación cuando correspondan. ASP.NET Core consulta mediante EF Core; Directus se conecta al mismo esquema para el backoffice, pero no puede crear, eliminar o modificar tablas, columnas, constraints, Foreign Keys o relaciones del dominio. Directus se adapta a la base creada y versionada por EF Core, no al contrario.
+La persistencia implementada usa `PortfolioDbContext`, `ServicesDbContext` y `CompanyProfileDbContext`, propietarios respectivos de los schemas `portfolio`, `services` y `company_profile`, de sus migrations y de su tabla `__ef_migrations_history`. `Contact` no tiene `DbContext` ni tabla para `ContactRequest`. Las referencias `portfolio.project.service_id` y `category_id` son UUID lógicos sin FK entre Bounded Contexts; la coherencia cruzada se validará mediante Application y contratos públicos cuando existan los casos de uso. PostgreSQL aplica `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `FOREIGN KEY` internas, `CHECK`, índices y comportamientos explícitos de eliminación. Directus se adaptará a los tres schemas creados y versionados por EF Core, no al contrario.
 
 ## Directus CMS
 
@@ -408,24 +392,24 @@ Para consulta administrativa, Directus Data Studio lee PostgreSQL directamente; 
 
 Para una mutación administrativa, Directus activa un Filter Hook bloqueante antes de persistir. El Hook llama a ASP.NET Core; Presentation despacha un Command mediante MediatR; Application recupera el estado mediante un port implementado con EF Core y orquesta las reglas e invariantes de Domain. Ante un error, Directus cancela la operación. Ante aprobación, el Hook devuelve el payload canónico y Directus ejecuta la única escritura final en PostgreSQL. ASP.NET Core no llama a `SaveChanges` para persistir por segunda vez esa misma mutación.
 
-Para el formulario de contacto, React obtiene los servicios públicos mediante la Query correspondiente y usa sus identificadores en el selector. Al enviar, ASP.NET Core mapea el Request DTO a un Command del módulo `Contact`; Application valida los datos y verifica la selección mediante un contrato mínimo de `Services/public/`, sin acceder a `Services/internal/` ni a sus tablas. Domain protege las reglas reales y un port de salida permite que Infrastructure entregue el mensaje mediante el proveedor de correo que se seleccione. Directus no participa. El requisito actual no exige guardar la solicitud en PostgreSQL: su persistencia histórica es una decisión independiente y pendiente.
+Para el formulario de contacto, React obtiene los servicios públicos mediante la Query correspondiente y usa sus identificadores en el selector. Al enviar, ASP.NET Core mapea el Request DTO a `SubmitContactRequestCommand`; `Contact.Application` valida la entrada, verifica el servicio mediante `Services/public/`, obtiene `ContactRequestRecipientEmail` mediante `CompanyProfile/public/`, crea `ContactRequest` y usa el port de correo. No accede a los `internal/` ajenos. Directus no participa y ser Aggregate Root no obliga a persistir históricamente la solicitud.
 
-La solicitud contempla conceptualmente nombre, apellido, correo del Cliente, empresa, teléfono, tipo de solicitud, identificador del servicio solicitado y mensaje o descripción cuando corresponda. El correo dirigido a Cromática Creativa debe presentar esos datos de forma estructurada y permitir identificar y responder al Cliente, sin asumir que su dirección se usará técnicamente como `From`. La estrategia de `From`, `Reply-To`, asunto y plantillas permanece pendiente.
+La solicitud contempla conceptualmente `PersonName`, empresa opcional, `EmailAddress`, `PhoneNumber`, `RequestType`, `RequestedServiceReference` y mensaje opcional. El `From` es una dirección técnica controlada por Cromática Creativa o el proveedor y configurada en Infrastructure; el `To` es `ContactRequestRecipientEmail` administrado en `CompanyProfile`; el `Reply-To` corresponde al correo del Cliente. Proveedor, asunto y plantillas permanecen pendientes.
 
-Para multimedia, el archivo físico y la referencia del dominio son conceptos distintos. Los archivos no se almacenarán como BLOB o base64 en las Entities de PostgreSQL; `Projects` guardará únicamente las referencias necesarias. En la V1, Directus podrá subir físicamente un archivo a almacenamiento persistente. El Filter Hook enviará la asociación a ASP.NET Core para validarla mediante un Command y Directus persistirá la referencia aprobada. La implementación concreta y el uso eventual de URLs externas para videos grandes siguen abiertos.
+Para multimedia, el archivo físico y la referencia del dominio son conceptos distintos. Los archivos no se almacenarán como BLOB o base64 en las Entities de PostgreSQL; `Portfolio` guardará las referencias necesarias. `ProjectMedia` representa imágenes o videos reales de un `Project`, mientras `ServiceCategory.ReferenceImage` es una imagen ilustrativa del tipo de trabajo. En la V1, Directus podrá subir físicamente un archivo a almacenamiento persistente. El Filter Hook enviará la asociación a ASP.NET Core para validarla mediante un Command y Directus persistirá la referencia aprobada. La implementación concreta y el uso eventual de URLs externas para videos grandes siguen abiertos.
 
 ## Tecnologías
 
 | Área | Tecnologías o enfoque | Estado |
 | --- | --- | --- |
 | Frontend | React, TypeScript, HTML5, CSS3, Fetch API o cliente aprobado | Aprobado; sin versión |
-| Backend | C#, .NET, ASP.NET Core Web API | Aprobado; sin versión |
+| Backend | C#, .NET 10 (`net10.0`), SDK 10.0.302; ASP.NET Core Web API futuro | Fundación Domain implementada |
 | Aplicación | CQRS, MediatR, Dependency Injection nativa | Aprobado |
-| Persistencia | Entity Framework Core, EF Core Migrations | Aprobado; sin versión |
+| Persistencia | Entity Framework Core 10.0.10, Npgsql EF provider 10.0.3, dotnet-ef 10.0.10 | Modelo y migrations iniciales implementados |
 | Datos | PostgreSQL | Aprobado; sin versión |
 | CMS | Directus self-hosted, Data Studio, Filter Hooks | Aprobado; sin versión |
 | Correo | Port de Application y adaptador de Infrastructure | Enfoque aprobado; proveedor pendiente |
-| Arquitectura | Monorepo, monolito modular, DDD pragmático, Bounded Contexts por validar, arquitectura hexagonal | Aprobado; límites detallados pendientes |
+| Arquitectura | Monorepo, monolito modular, DDD pragmático, cuatro Bounded Contexts definidos, arquitectura hexagonal | Aprobado |
 | Contenedores | Docker | No establecido |
 
 ## Endpoints
@@ -467,7 +451,7 @@ El catálogo detallado se mantendrá en [docs/ENDPOINTS.md](docs/ENDPOINTS.md) y
 - No versiona archivos `.env` con secretos ni credenciales en código.
 - Aplica mínimo privilegio a las credenciales de base de datos.
 - No expone información interna de Directus o PostgreSQL.
-- No revela stack traces, credenciales ni detalles del proveedor de correo. La dirección receptora se configura fuera de Domain y React, y los secretos permanecen fuera del repositorio.
+- No revela stack traces, credenciales ni detalles del proveedor de correo. El destinatario se obtiene desde `CompanyProfile`; la identidad técnica emisora y los secretos del proveedor se configuran en Infrastructure y permanecen fuera del repositorio.
 - Antes de producción debe evaluarse protección del formulario frente a abuso: rate limiting, spam, automatización, límites de tamaño, tratamiento seguro del contenido y observabilidad. CAPTCHA no queda impuesto como solución.
 - Utiliza HTTPS en producción y mantiene sus dependencias actualizadas mediante cambios revisados.
 
@@ -483,9 +467,17 @@ El catálogo detallado se mantendrá en [docs/ENDPOINTS.md](docs/ENDPOINTS.md) y
 
 ## Desarrollo local
 
-El entorno ejecutable todavía no ha sido creado. Por ello no existen comandos válidos de instalación, compilación, migrations o arranque que puedan documentarse sin especular.
+La solución de backend, la herramienta local y los paquetes pueden restaurarse y compilarse con el SDK fijado:
 
-Cuando se complete la fundación técnica, esta sección deberá incluir y verificar como mínimo:
+```powershell
+dotnet tool restore
+dotnet restore backend/CromaticaCreativa.sln
+dotnet build backend/CromaticaCreativa.sln --configuration Release
+```
+
+Estos comandos fueron verificados sobre SDK `10.0.302`. Existen las tres migrations iniciales y sus scripts SQL fueron revisados, pero no se aplicaron sobre PostgreSQL porque no se proporcionaron credenciales de desarrollo. Todavía no existe host ASP.NET Core, frontend ni proceso arrancable.
+
+Cuando se incorporen las siguientes capas funcionales, esta sección deberá incluir y verificar además:
 
 - Prerrequisitos y versiones soportadas.
 - Restauración de dependencias de frontend y backend.
@@ -498,11 +490,11 @@ El flujo de trabajo previsto está descrito en [docs/DEVELOPMENT.md](docs/DEVELO
 
 ## Variables de entorno
 
-Los nombres definitivos de variables aún no existen. Antes de ejecutar la solución se deberá documentar, sin incluir valores secretos:
+La conexión de design-time ya tiene nombre; las demás variables se documentarán al implementar sus consumidores, siempre sin incluir valores secretos:
 
 | Configuración | Consumidor | Estado |
 | --- | --- | --- |
-| Conexión de PostgreSQL | ASP.NET Core | Nombre pendiente |
+| `CROMATICA_DB_CONNECTION_STRING` | Factories EF Core de design-time; futuro host ASP.NET Core | Definida; valor secreto no versionado |
 | URL base de la API | React | Nombre pendiente |
 | Configuración interna del CMS | Directus | Nombres pendientes |
 | Conexión al PostgreSQL del dominio | Directus | Nombre pendiente |
@@ -511,7 +503,7 @@ Los nombres definitivos de variables aún no existen. Antes de ejecutar la soluc
 | Persistencia interna del CMS | Directus | Topología pendiente |
 | Origen permitido del frontend | ASP.NET Core | Nombre pendiente si la configuración lo requiere |
 | Almacenamiento multimedia | Componente por decidir | Pendiente de decisión |
-| Dirección receptora del formulario | ASP.NET Core / Infrastructure | Nombre y valor pendientes; debe ser configurable |
+| Dirección emisora técnica del formulario | Infrastructure | Nombre y valor pendientes; debe pertenecer a Cromática Creativa o cumplir las reglas del proveedor |
 | Credenciales y configuración del proveedor de correo | Infrastructure | Proveedor y nombres pendientes |
 
 Se deberá proporcionar un archivo de ejemplo seguro, como `.env.example`, únicamente cuando los nombres reales sean incorporados al proyecto. Los `.env` locales con secretos nunca deben versionarse.
@@ -558,6 +550,6 @@ Las reglas detalladas se encuentran en [docs/CONVENTIONS.md](docs/CONVENTIONS.md
 
 ## Estado del proyecto
 
-El proyecto se encuentra en la **Fase 0 — Documentación y arquitectura**. No hay código funcional, proyectos de frontend/backend, esquema de base de datos, endpoints, migrations, paquetes ni configuración de deployment.
+El proyecto se encuentra en la **Fase 2 — Modelo de dominio y persistencia**. Existen la solución .NET 10, 16 proyectos separados por capa, los modelos Domain de `Portfolio`, `Services`, `CompanyProfile` y `Contact`, y la persistencia EF Core/PostgreSQL de `Portfolio`, `Services` y `CompanyProfile` con diez Persistence Models, tres `DbContext`, configuraciones, mappers y migrations iniciales. Application y Presentation permanecen sin lógica funcional; `Contact` continúa solo en Domain y sin persistencia. No existen host ASP.NET Core, frontend, endpoints ni configuración de deployment.
 
-Antes de implementar se deben resolver, entre otras, las versiones del stack, la organización física de la solución .NET, Controllers o Minimal APIs, estrategia multimedia, modelos iniciales, integración y persistencia interna de Directus, autenticación Directus → ASP.NET Core, proveedor y configuración de correo, política antiabuso, posible persistencia histórica de solicitudes, testing y deployment. Consulte [docs/ROADMAP.md](docs/ROADMAP.md) para el seguimiento.
+Siguen pendientes Controllers o Minimal APIs, ejecución de migrations sobre un PostgreSQL configurado, límites transaccionales de futuros casos de uso, multimedia, integración y persistencia interna de Directus, autenticación Directus → ASP.NET Core, proveedor y configuración técnica de correo, política antiabuso, posible persistencia histórica de solicitudes, framework de testing y deployment. Consulte [docs/ROADMAP.md](docs/ROADMAP.md) para el seguimiento.

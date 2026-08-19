@@ -15,7 +15,10 @@ Estas convenciones definen el punto de partida para backend C#/.NET y frontend T
 
 - **Cliente**: actor público que consulta contenido y puede enviar el formulario de contacto mediante React, sin cuenta, registro, login, perfil, roles ni permisos persistidos.
 - **Administrador**: personal autorizado de Cromática Creativa que accede a Directus mediante credenciales administrativas.
-- `CorporateClients`: módulo conceptual de información institucional sobre organizaciones clientes; no representa cuentas del actor Cliente.
+- `Portfolio`: Bounded Context del trabajo realizado; contiene `Project` y `CorporateClient`.
+- `Services`: Bounded Context de la oferta comercial; contiene `Service` y `ServiceCategory`.
+- `CompanyProfile`: Bounded Context de información corporativa administrable, ubicación y redes sociales.
+- `Contact`: Bounded Context dedicado exclusivamente a procesar solicitudes de Clientes.
 - **ASP.NET Core API**: único backend consumido por React.
 - **Directus**: CMS administrativo; no es la API pública ni propietario del esquema.
 
@@ -34,49 +37,37 @@ Seguir las convenciones estándar de .NET:
 - Usar `async`/`await` y sufijo `Async` según las guías .NET y el contrato real; los Handlers de MediatR conservan la firma definida por la librería.
 - Propagar `CancellationToken` en I/O y operaciones cancelables.
 
-No se fija todavía un namespace raíz. Cuando se decida, los namespaces deberán reflejar módulo, visibilidad y capa de forma consistente sin depender innecesariamente de cada carpeta incidental.
+El namespace raíz es `CromaticaCreativa.Modules`. Los namespaces siguen `CromaticaCreativa.Modules.{BoundedContext}.{Layer}` y agregan el área cohesiva cuando corresponde, por ejemplo `CromaticaCreativa.Modules.Portfolio.Domain.ValueObjects`.
 
 ## Módulos y carpetas
 
-Patrón conceptual:
+Patrón físico aprobado:
 
 ```text
-modules/{module}/
-├── public/
-│   ├── contracts/
-│   ├── dtos/
-│   └── events/
-└── internal/
-    ├── domain/
-    ├── application/
-    │   ├── commands/
-    │   │   └── {UseCase}/
-    │   │       ├── {UseCase}Command.cs
-    │   │       └── {UseCase}CommandHandler.cs
-    │   ├── queries/
-    │   │   └── {UseCase}/
-    │   │       ├── {UseCase}Query.cs
-    │   │       └── {UseCase}QueryHandler.cs
-    │   └── ports/
-    ├── infrastructure/
-    └── presentation/
+backend/modules/{BoundedContext}/
+├── CromaticaCreativa.Modules.{BoundedContext}.Domain/
+├── CromaticaCreativa.Modules.{BoundedContext}.Application/
+├── CromaticaCreativa.Modules.{BoundedContext}.Infrastructure/
+└── CromaticaCreativa.Modules.{BoundedContext}.Presentation/
 ```
 
 - El nombre del módulo representa una capacidad de negocio y se expresa en PascalCase en C#.
 - Los casos de uso se agrupan uno por carpeta: `queries/GetProjects/` o `commands/PublishProject/`, no en archivos masivos de mensajes o Handlers.
 - Co-localizar con el caso de uso sus DTOs o validadores exclusivos cuando mejore la cohesión; no crear archivos ceremoniales ni una carpeta vacía por cada categoría posible.
 - Crear solo carpetas que contengan responsabilidades reales.
-- `public/` contiene contratos entre módulos, no elementos públicos por accidente.
-- `internal/` nunca se referencia desde otro módulo.
-- Los módulos son candidatos a alinearse con Bounded Contexts, no contextos confirmados automáticamente.
+- Los contratos públicos entre módulos se materializan solo cuando un caso de uso tenga un consumidor real; no se crea anticipadamente un proyecto `Contracts` o `Public`.
+- La implementación propia de otro Bounded Context nunca se referencia directamente.
+- Los módulos corresponden a los cuatro Bounded Contexts aprobados: `Portfolio`, `Services`, `CompanyProfile` y `Contact`.
 - Definir un Bounded Context por lenguaje y modelo coherentes; no por tabla, Entity o carpeta.
 - No compartir Entities o Aggregate Roots entre módulos/Bounded Contexts.
+- Las referencias permitidas son `Application → Domain`, `Presentation → Application` e `Infrastructure → Application/Domain`, pero solo se agregan cuando código real las necesita.
+- Están prohibidas `Domain → Application/Infrastructure/Presentation` y `Application → Infrastructure/Presentation`.
 
-La capitalización física de carpetas se fijará al crear la solución y deberá usarse uniformemente.
+Las carpetas de Bounded Context, proyecto, capa y áreas de Domain usan PascalCase. La solución física es `backend/CromaticaCreativa.sln`; `backend/Directory.Build.props` aplica `net10.0`, nullable reference types e implicit usings a todos los proyectos, y `global.json` fija el SDK `10.0.302`.
 
 ## Commands
 
-- Nombrar con verbo imperativo e intención: `PublishProjectCommand`, `UpdateContactInformationCommand`.
+- Nombrar con verbo imperativo e intención: `PublishProjectCommand`, `UpdateCompanyContactInformationCommand`.
 - Sufijo obligatorio `Command`.
 - Preferir un record inmutable si encaja con los patrones adoptados.
 - Incluir solo datos de entrada del caso de uso; no incluir `DbContext`, servicios, implementaciones concretas, Entities o tipos de Infrastructure, Directus, SMTP ni detalles de proveedor.
@@ -91,7 +82,7 @@ La capitalización física de carpetas se fijará al crear la solución y deber�
 
 ## Queries
 
-- Nombrar por resultado o búsqueda: `GetProjectsQuery`, `GetProjectBySlugQuery`.
+- Nombrar por resultado o búsqueda: `GetProjectsQuery`, `GetProjectByIdQuery`.
 - Sufijo obligatorio `Query`.
 - No producir efectos secundarios observables.
 - Nunca enviar correos ni ejecutar otras acciones externas propias de un Command.
@@ -129,7 +120,7 @@ La capitalización física de carpetas se fijará al crear la solución y deber�
 
 ## Entities y Aggregate Roots
 
-- Usar sustantivos singulares: `Project`, `CorporateClient`, `Service` cuando el lenguaje de dominio los confirme.
+- Usar sustantivos singulares: `Project`, `CorporateClient`, `Service`, `ServiceCategory`, `CompanyContactInformation`, `CompanyLocation` y `ContactRequest`.
 - Una Entity requiere identidad y ciclo de vida; no convertir automáticamente cada tabla o DTO en Entity.
 - Un Aggregate define un límite de consistencia y su Root protege las invariantes internas; no crear un Aggregate Root por tabla.
 - Mantener identidad, comportamiento e invariantes dentro de Domain.
@@ -139,14 +130,52 @@ La capitalización física de carpetas se fijará al crear la solución y deber�
 - Modificar un Aggregate Root a través de su API de dominio.
 - Evitar setters públicos o manipulación desde Handlers que permitan saltarse invariantes.
 
+Clasificación aprobada:
+
+| Bounded Context | Aggregate Roots | Entities internas |
+| --- | --- | --- |
+| `Portfolio` | `Project`, `CorporateClient` | `ProjectMedia` dentro de `Project` |
+| `Services` | `Service`, `ServiceCategory` | — |
+| `CompanyProfile` | `CompanyContactInformation` | `CompanyLocation` |
+| `Contact` | `ContactRequest` | — |
+
+- `ProjectMedia` no existe independientemente de `Project`; su colección se modifica mediante el Aggregate Root.
+- `CompanyLocation` pertenece a `CompanyContactInformation`; no crear un módulo `Location`.
+- `ContactRequest` es Aggregate Root aunque su persistencia histórica no esté aprobada. Aggregate Root no equivale automáticamente a tabla.
+- `ServiceCategory` es Aggregate Root con identidad y ciclo de vida propios; no crear un módulo `Categories`.
+
 ## Value Objects
 
-- Nombrar por concepto: `ProjectSlug`, no por representación (`StringWrapper`).
+- Nombrar por concepto del modelo, por ejemplo `ProjectTitle`, no por representación genérica como `StringWrapper`.
 - Ser inmutables y validar sus invariantes al crearse.
 - Implementar igualdad por valor.
 - No permitir instancias inválidas con la expectativa de validarlas después en Application.
 - No crear Value Objects para cada tipo primitivo si no protegen una regla o mejoran el modelo.
-- Ejemplos potenciales como `ProjectSlug`, `EmailAddress` o `PhoneNumber` no son tipos obligatorios hasta que existan reglas reales.
+- `ProjectPeriod` deriva `TotalDays` de `EndDate - StartDate` y protege `EndDate >= StartDate`; no persistir conceptualmente `TotalDays` como valor independiente.
+- `SocialLink` es un Value Object inmutable compuesto por `SocialNetwork` y `ExternalUrl`; no agregar `SocialLinkId` sin una necesidad de identidad.
+- `ProjectServiceReference` y `ProjectCategoryReference` pertenecen a `Portfolio.Domain`; no usan directamente tipos de `Services.Domain`.
+- `RequestedServiceReference` pertenece a `Contact.Domain`.
+- Los Value Objects aprobados se mantienen por Bounded Context aunque compartan nombres; no crear un Shared Kernel por coincidencia nominal.
+
+### Value Objects por contexto
+
+- `Portfolio`: `ProjectId`, `ProjectMediaId`, `CorporateClientId`, `ProjectTitle`, `CorporateClientName`, `MediaReference`, `DisplayOrder`, `ProjectPeriod`, `ProjectServiceReference`, `ProjectCategoryReference`.
+- `Services`: `ServiceId`, `ServiceName`, `ServiceCategoryId`, `ServiceCategoryName`, `MediaReference`, `DisplayOrder`.
+- `CompanyProfile`: `CompanyContactInformationId`, `CompanyLocationId`, `EmailAddress`, `PhoneNumber`, `Address`, `GeoCoordinates`, `ExternalUrl`, `SocialLink`.
+- `Contact`: `ContactRequestId`, `PersonName`, `EmailAddress`, `PhoneNumber`, `RequestedServiceReference`.
+
+Esta lista define el modelo conceptual; no obliga a crear clases vacías o persistencia antes de que exista implementación.
+
+## Convenciones del modelo aprobado
+
+- `Project` usa `PublicationStatus`, conceptualmente `Draft`/`Published`; no reutilizar `Active`/`Inactive` para publicación.
+- `CorporateClient` conserva `VisibilityStatus` con semántica propia.
+- `Service` usa `ServiceStatus` y `ServiceCategory` usa `ServiceCategoryStatus`, ambos con `Active`/`Inactive`.
+- No crear un enum de estado universal para compartir estas semánticas.
+- Cada `ServiceCategory` referencia exactamente un `Service` mediante `ServiceId` o equivalente dentro de `Services`.
+- `ServiceCategory.ReferenceImage` nombra una imagen ilustrativa del tipo de trabajo. `ProjectMedia` nombra multimedia real de un Project; no intercambiar ambos conceptos.
+- `CompanyContactInformation` administra `ContactRequestRecipientEmail`; `Contact` no administra información corporativa.
+- Los atributos mínimos documentados pertenecen a sus tipos concretos y no se convierten en una convención obligatoria para todo Aggregate Root.
 
 ## Domain Exceptions
 
@@ -239,6 +268,11 @@ La estrategia de versionado de API y Controllers frente a Minimal APIs están pe
 ## Base de datos
 
 - Usar PostgreSQL y configurar mappings mediante EF Core en Infrastructure.
+- Mantener `Persistence Model != Domain Model`: nunca configurar Aggregate Roots, Entities o Value Objects de Domain como entidades EF Core ni agregarles atributos de persistencia.
+- Nombrar las clases técnicas de persistencia en `PascalCase` con sufijo `Model`, por ejemplo `ProjectModel`; no usar el sufijo `Record`.
+- Cada `DbContext`, configuración, mapper y migration pertenece al Infrastructure del Bounded Context propietario.
+- Usar únicamente `PortfolioDbContext`/`portfolio`, `ServicesDbContext`/`services` y `CompanyProfileDbContext`/`company_profile`; no crear `ContactDbContext` ni persistencia de `ContactRequest` sin una decisión funcional futura.
+- No crear FKs ni navigations EF entre Bounded Contexts. Las referencias cruzadas se representan con UUID opacos y se validan mediante Application/contratos públicos.
 - Directus puede leer directamente tablas del dominio y realiza el `INSERT`, `UPDATE` o `DELETE` final de una mutación aprobada.
 - Toda mutación administrativa se intercepta antes de persistir mediante un Filter Hook que procesa la intención en ASP.NET Core.
 - EF Core puede leer estado durante el procesamiento, pero no realiza una segunda escritura de la misma operación.
@@ -249,17 +283,30 @@ La estrategia de versionado de API y Controllers frente a Minimal APIs están pe
 
 ### Nombres de tablas y columnas
 
-La convención física —por ejemplo, `snake_case` o nombres convencionales de EF Core— todavía no ha sido aprobada. Antes de la primera migration debe decidirse y aplicarse uniformemente. Después de cada migration, Directus debe adaptarse o introspeccionar el esquema resultante sin rediseñarlo.
+La convención física aprobada es explícita y uniforme:
+
+- schemas: `snake_case` (`portfolio`, `services`, `company_profile`);
+- tablas: nombre singular en `snake_case` (`project`, `corporate_client`, `social_link`);
+- columnas: `snake_case` (`publication_status`, `company_profile_id`);
+- claves primarias: prefijo `pk_`;
+- claves foráneas: prefijo `fk_`;
+- restricciones únicas: prefijo `uq_`;
+- checks: prefijo `ck_`;
+- índices no únicos: prefijo `ix_`.
+
+No agregar un paquete de naming conventions para derivar estos nombres: definirlos en cada `IEntityTypeConfiguration<T>`. Después de cada migration, Directus debe adaptarse o introspeccionar el esquema resultante sin rediseñarlo.
 
 ### Migrations
 
-- Usar nombres descriptivos en PascalCase: `CreateProjectsSchema`, `AddProjectPublicationStatus`.
+- Usar nombres descriptivos en PascalCase: `CreatePortfolioSchema`, `AddProjectPublicationStatus`.
 - Evitar nombres vagos como `Changes`, `Fix` o marcas de tiempo manuales como descripción.
 - Una migration debe corresponder a un cambio coherente y revisable.
 - Revisar `Up` y `Down`; señalar explícitamente cambios destructivos o pérdida de datos.
 - No editar una migration ya aplicada en entornos compartidos; crear una nueva según la política que se establezca.
+- Guardar cada migration y `ModelSnapshot` bajo `Persistence/Migrations/` del Infrastructure propietario; nunca usar una carpeta global de migrations.
+- Mantener un historial por contexto en `{schema}.__ef_migrations_history`.
 
-La ubicación y el comando de generación se documentarán cuando exista la configuración real.
+Los comandos de generación, scripting y aplicación están documentados en `DEVELOPMENT.md`.
 
 ## TypeScript y React
 
@@ -323,13 +370,15 @@ La ubicación y el comando de generación se documentarán cuando exista la conf
 
 - El flujo es React → ASP.NET Core → MediatR → Application Command Handler; el Handler invoca Domain y un port de correo de Application, implementado por un adaptador de Infrastructure.
 - Directus, sus Filter Hooks y PostgreSQL no forman parte del envío del formulario.
-- El nombre conceptual `SubmitContactRequestCommand` o `SendContactRequestCommand` expresa la intención; el nombre definitivo se decide al implementar y no representa código existente.
+- `SubmitContactRequestCommand` expresa conceptualmente la intención aprobada; no representa código ni endpoint existente.
 - React puede validar para UX, pero Presentation/Application vuelven a validar campos, formatos, longitudes, tipo de solicitud, consistencia e identificador del servicio.
 - Usar un identificador de servicio y validarlo contra una capacidad mínima de `Services/public/`; `Contact` no consume `Services/internal/`, su `DbContext` ni sus tablas.
+- Obtener `ContactRequestRecipientEmail` mediante `CompanyProfile/public/`; `Contact` no consume `CompanyProfile/internal/`, su `DbContext` ni sus tablas.
 - No duplicar manualmente el catálogo de servicios en el formulario si `Services` es su fuente.
 - Modelos React, Request DTOs, Commands y conceptos de Domain son fronteras distintas; mapearlos explícitamente.
-- No crear por defecto una Entity o tabla `ContactRequest`. La persistencia histórica requiere un requisito independiente.
-- Mantener destinatario y configuración en Application/Infrastructure; nunca aceptar del Cliente destinatarios, encabezados, plantillas o credenciales arbitrarios.
+- Crear `ContactRequest` mediante su API de Domain; no convertir el Request DTO en Aggregate. No crear por defecto una tabla: la persistencia histórica requiere un requisito independiente.
+- Separar `From` técnico en Infrastructure, `To` desde `CompanyProfile` y `Reply-To` desde el `EmailAddress` validado del solicitante.
+- Nunca aceptar del Cliente `From`, `To`, plantillas, credenciales o configuración técnica arbitrarios.
 - Traducir fallos del proveedor a resultados seguros sin exponer stack traces ni detalles internos. Los códigos HTTP concretos permanecen pendientes.
 - Diseñar antes de producción protección proporcional contra abuso, sin imponer CAPTCHA hasta que se justifique.
 
@@ -341,7 +390,7 @@ La ubicación y el comando de generación se documentarán cuando exista la conf
 - Los roles, policies y permissions editoriales deben aplicar mínimo privilegio y no habilitar cambios irrestrictos del Data Model.
 - Separar archivos físicos de metadata o referencias del dominio.
 - No almacenar archivos como BLOB o base64 dentro de Entities de PostgreSQL.
-- Procesar la asociación de archivos con Projects mediante Filter Hook y Command; Directus persiste la referencia aprobada.
+- Procesar la asociación de `ProjectMedia` con `Project` mediante Filter Hook y Command de `Portfolio`; Directus persiste la referencia aprobada.
 - Mantener misión, visión, descripción institucional, eslóganes y textos estáticos en código; no crear `SiteSettings` sin necesidad.
 
 ## Tests
@@ -376,6 +425,7 @@ La ubicación y el comando de generación se documentarán cuando exista la conf
 10. Toda mutación administrativa pasa por un Filter Hook y ASP.NET Core antes de que Directus persista.
 11. ASP.NET Core y Directus nunca escriben dos veces la misma mutación.
 12. El formulario público pasa por un Command y un port de correo; nunca por Directus ni directamente desde React.
-13. `Contact` valida servicios mediante `Services/public/` y no asume persistencia de solicitudes.
+13. `Contact` valida servicios mediante `Services/public/`, obtiene el destinatario mediante `CompanyProfile/public/` y no asume persistencia de solicitudes.
 14. Domain Exceptions expresan únicamente violaciones de negocio; Application, Infrastructure y Presentation conservan sus propios errores y traducciones.
 15. El tiempo controlable se obtiene mediante un Application Port y se pasa explícitamente a Domain; el reloj real pertenece a Infrastructure.
+16. `Portfolio`, `Services`, `CompanyProfile` y `Contact` son los Bounded Contexts iniciales; los conceptos internos no se convierten en módulos independientes.

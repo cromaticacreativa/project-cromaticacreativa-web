@@ -2,7 +2,7 @@
 
 Este documento registra exclusivamente endpoints implementados y verificados de la API ASP.NET Core. React deberá consumir esta API; nunca la API de Directus.
 
-En la V1, el **Cliente** consume sin cuenta ni autenticación endpoints públicos de lectura y, cuando se implemente, el caso de uso para enviar el formulario de contacto. Este último produce un correo, pero no permite modificar contenido administrado ni implica persistir la solicitud. El **Administrador** gestiona contenido en Directus Data Studio. Las consultas administrativas leen PostgreSQL directamente; los Filter Hooks llaman endpoints internos de ASP.NET Core antes de cada mutación. No existen login de Cliente, registro, Identity, roles o permisos administrativos propios del backend.
+En la V1, el **Cliente** consume sin cuenta ni autenticación endpoints públicos de lectura de `Portfolio`, `Services` y `CompanyProfile` y, cuando se implemente, el caso de uso de `Contact` para enviar el formulario. Este último produce un correo, pero no permite modificar contenido administrado ni implica persistir históricamente `ContactRequest`. El **Administrador** gestiona contenido en Directus Data Studio. Las consultas administrativas leen PostgreSQL directamente; los Filter Hooks llaman endpoints internos de ASP.NET Core antes de cada mutación. No existen login de Cliente, registro, Identity, roles o permisos administrativos propios del backend.
 
 Los endpoints serán añadidos a esta sección a medida que sean implementados. Actualmente no existe una API funcional ni rutas definidas.
 
@@ -28,7 +28,7 @@ Los endpoints serán añadidos a esta sección a medida que sean implementados. 
 
 ## API pública
 
-Será consumida por React y contendrá operaciones de lectura para el Cliente. También deberá incorporar el caso de uso público de envío del formulario de contacto mediante un Command y un port de correo, sin Directus y sin autenticación. Las rutas se documentarán únicamente cuando estén implementadas.
+Será consumida por React y contendrá las lecturas requeridas para mostrar Services y sus categorías activas, filtrar Projects publicados por Service/ServiceCategory y presentar CompanyProfile. También deberá incorporar el caso de uso público de envío del formulario mediante un Command y un port de correo, sin Directus y sin autenticación. Estas capacidades conceptuales no fijan rutas; solo se documentarán cuando estén implementadas.
 
 ## API interna para mutaciones de Directus
 
@@ -38,4 +38,4 @@ Las rutas y el mecanismo de autenticación/autorización todavía no están impl
 
 ## Información pendiente
 
-Antes del primer endpoint deben establecerse Controllers o Minimal APIs, convención de rutas, estrategia de resultados/excepciones, tratamiento y mapping seguro de errores, validación, paginación y posible versionado de la API. Para el formulario también permanecen pendientes el contrato definitivo, proveedor y configuración de correo, validación del servicio mediante `Services`, protección antiabuso y mapeo seguro de fallos. Ninguna ruta ni código HTTP queda fijado por este catálogo.
+Antes del primer endpoint deben establecerse Controllers o Minimal APIs, convención de rutas, estrategia de resultados/excepciones, tratamiento y mapping seguro de errores, validación, paginación y posible versionado de la API. Para el formulario también permanecen pendientes el contrato definitivo, proveedor y configuración técnica de `From`, validación del servicio mediante `Services/public/`, obtención del `To` mediante `CompanyProfile/public/`, protección antiabuso y mapeo seguro de fallos. Ninguna ruta ni código HTTP queda fijado por este catálogo.

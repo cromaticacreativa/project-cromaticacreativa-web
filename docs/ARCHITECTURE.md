@@ -4,7 +4,7 @@ Este documento es la fuente de verdad de la arquitectura de Cromática Creativa.
 
 ## Estado y alcance
 
-El repositorio se encuentra en fase documental y no contiene implementación. Los árboles y ejemplos siguientes son conceptuales: orientan la fundación técnica sin fijar nombres de `.csproj`, namespaces, versiones o mecanismos que aún no han sido decididos.
+El repositorio cuenta con una fundación inicial de backend y con el Domain de los cuatro Bounded Contexts implementado. Usa .NET 10 (`net10.0`), SDK `10.0.302`, la solución `backend/CromaticaCreativa.sln`, namespace raíz `CromaticaCreativa.Modules` y proyectos separados por capa. Application, Infrastructure y Presentation todavía no contienen lógica funcional.
 
 La solución será un monorepo compuesto por:
 
@@ -20,7 +20,7 @@ El actor público se denomina **Cliente**. En la V1, Cliente no es un usuario re
 
 El actor **Administrador** representa al personal autorizado de Cromática Creativa. El Administrador accede al CMS Directus mediante credenciales administrativas para gestionar el contenido publicado en el sitio web. No existe panel administrativo propio, autenticación administrativa en ASP.NET Core ni sistema propio de roles y permisos.
 
-El actor Cliente debe distinguirse de los Clientes Corporativos mostrados como contenido institucional y gestionados conceptualmente por el módulo `CorporateClients`.
+El actor Cliente debe distinguirse de `CorporateClient`, Aggregate Root de `Portfolio` que representa una empresa o marca con la que Cromática Creativa ha trabajado.
 
 ## Vista de alto nivel
 
@@ -90,92 +90,284 @@ El enfoque permite:
 
 Compartir proceso y base de datos no autoriza a saltarse límites. Un módulo no debe consultar directamente tablas de otro ni importar su código interno. Si necesita una capacidad ajena, debe consumir un contrato explícito del API público de ese módulo.
 
-## Módulos conceptuales
+## Bounded Contexts definitivos
 
-| Módulo | Responsabilidad | Observaciones |
-| --- | --- | --- |
-| `Projects` | Proyectos, título, slug, descripción, fecha, publicación, destacados y asociaciones. | El modelo exacto debe diseñarse antes de persistirlo. |
-| `CorporateClients` | Información institucional de organizaciones clientes con las que ha trabajado la empresa. | No representa cuentas del actor Cliente. |
-| `Services` | Servicios ofrecidos. | El contenido y orden editorial están pendientes. |
-| `Contact` | Información pública de contacto y redes sociales, y casos de uso para que el Cliente envíe solicitudes a la empresa. | El formulario no implica por sí mismo una Entity persistente. |
-| `Location` | Ubicación pública de la empresa. | El modelo exacto debe validarse con el ERS. |
+Los límites iniciales ya fueron definidos por lenguaje, modelo y responsabilidad. No son candidatos provisionales:
 
-La multimedia permanecerá inicialmente dentro de `Projects`; solo se extraerá si desarrolla lógica propia suficiente. No se crearán automáticamente módulos `Identity`, `Users`, `Site`, `SiteSettings` o `Media`. Los límites deberán basarse en capacidades y reglas del negocio, no únicamente en tablas.
+```text
+modules/
+├── Portfolio/
+├── Services/
+├── CompanyProfile/
+└── Contact/
+```
+
+| Bounded Context | Aggregate Roots | Entities internas | Responsabilidad |
+| --- | --- | --- | --- |
+| `Portfolio` | `Project`, `CorporateClient` | `ProjectMedia` dentro de `Project` | Portafolio real de trabajos realizados |
+| `Services` | `Service`, `ServiceCategory` | — | Oferta comercial y categorías de trabajo |
+| `CompanyProfile` | `CompanyContactInformation` | `CompanyLocation` | Datos administrables para contactar y localizar la empresa |
+| `Contact` | `ContactRequest` | — | Procesamiento de solicitudes del formulario |
+
+`SocialLink` es un Value Object de `CompanyProfile`, no una Entity. `Projects`, `CorporateClients`, `Location`, `Categories` y `Media` no son módulos independientes. Tampoco se crearán `Identity`, `Users`, `Site` o `SiteSettings` sin un requisito futuro explícito.
+
+```mermaid
+flowchart LR
+    portfolio["Portfolio"]
+    services["Services"]
+    profile["CompanyProfile"]
+    contact["Contact"]
+    portfolio -. "consulta contratos públicos" .-> services
+    contact -. "consulta contratos públicos" .-> services
+    contact -. "consulta contratos públicos" .-> profile
+```
+
+Las relaciones punteadas son dependencias de Application hacia `public/` del contexto proveedor. No representan dependencias `Domain → Domain` ni acceso a `internal/` ajeno.
 
 ## DDD y Bounded Contexts
 
 El backend aplica Domain-Driven Design de forma pragmática. Se utilizan lenguaje ubicuo, invariantes, Entities, Aggregate Roots, Value Objects, Domain Services y Domain Events únicamente cuando expresan reglas o límites reales. DDD no exige un Aggregate por tabla, un Value Object por primitivo, un Domain Service por método, un Domain Event por CRUD ni un Bounded Context por Entity.
 
-Un **Bounded Context** establece un límite dentro del cual un lenguaje y un modelo tienen significado consistente. Se define por semántica, capacidades y reglas del negocio, no por tablas, carpetas o conveniencia técnica. Los módulos `Projects`, `CorporateClients`, `Services`, `Contact` y `Location` son candidatos a alinearse con límites de contexto, pero todavía no se afirma que cada uno sea un Bounded Context independiente; esa correspondencia debe validarse al diseñar el modelo.
+Un **Bounded Context** establece un límite dentro del cual un lenguaje y un modelo tienen significado consistente. Se define por semántica, capacidades y reglas del negocio, no por tablas, carpetas o conveniencia técnica. `Portfolio`, `Services`, `CompanyProfile` y `Contact` son los cuatro Bounded Contexts iniciales aprobados.
 
 Entre módulos o Bounded Contexts se usan contratos explícitos y mínimos. No se comparten directamente Entities o Aggregate Roots, no se accede a tablas ajenas y no se importa `internal/` de otro módulo. Si el mismo término necesita significados diferentes entre contextos, cada modelo conserva su propia representación y la traducción ocurre en la frontera acordada.
 
-## Anatomía de un módulo
+No se crea un Shared Kernel solo porque distintos contextos utilicen nombres como `EmailAddress`, `PhoneNumber` o `MediaReference`. Cada contexto puede proteger reglas y representaciones propias. Tampoco se crea un enum universal de estado: publicación, visibilidad y disponibilidad comercial tienen significados distintos.
 
-```mermaid
-flowchart TD
-    module["Module"] --> public["public: contrato entre módulos"]
-    module --> internal["internal: implementación privada"]
-    public --> contract["contracts"]
-    public --> dto["dtos"]
-    public --> event["events"]
-    internal --> application["application"]
-    internal --> domain["domain"]
-    application --> commands["commands"]
-    application --> queries["queries"]
-    application --> ports["ports"]
-    internal --> infrastructure["infrastructure"]
-    internal --> presentation["presentation"]
+## Modelo de `Portfolio`
+
+`Portfolio` representa principalmente el trabajo realizado por Cromática Creativa. Contiene dos Aggregate Roots:
+
+```text
+Portfolio
+├── Project [Aggregate Root]
+│   └── ProjectMedia[] [Entity]
+└── CorporateClient [Aggregate Root]
 ```
 
-Estructura conceptual:
+### `Project` — Aggregate Root
+
+Modelo mínimo conceptual:
+
+```text
+Project
+├── ProjectId
+├── ProjectTitle?
+├── Description
+├── PublicationStatus
+├── DisplayOrder
+├── CorporateClientId?
+├── ProjectServiceReference
+├── ProjectCategoryReference
+├── ProjectPeriod
+├── CoverMediaId?
+└── ProjectMedia[]
+```
+
+`Project` protege su publicación, controla la colección multimedia, conserva como máximo una referencia a un `CorporateClient` principal y representa el Service, ServiceCategory y período correspondientes al trabajo. `PublicationStatus` usa `Draft` y `Published`; un Draft puede no tener `ProjectTitle`, pero `Publish()` rechaza la transición mientras no exista un título válido. Solo Projects publicados y que cumplan sus invariantes pueden aparecer públicamente.
+
+La FK interna `portfolio.project.corporate_client_id` usa `RESTRICT`: un `CorporateClient` referenciado no se elimina físicamente. Para retirarlo de publicación se utiliza `VisibilityStatus.Hidden`; cualquier eliminación futura deberá comprobar sus Projects y decidir explícitamente su tratamiento.
+
+### `ProjectPeriod` — Value Object
+
+```text
+ProjectPeriod
+├── StartDate
+├── EndDate
+└── TotalDays = EndDate - StartDate
+```
+
+`ProjectPeriod` protege como mínimo `EndDate >= StartDate`. `TotalDays` es derivado y no se mantiene como tercer valor independiente. Domain posee el período aunque el contrato público decida mostrar ambas fechas, solo la duración o ninguna; esa exposición HTTP/UI permanece pendiente.
+
+### `ProjectMedia` — Entity
+
+```text
+ProjectMedia
+├── ProjectMediaId
+├── MediaReference
+├── MediaType
+└── DisplayOrder
+```
+
+`ProjectMedia` tiene identidad dentro del Aggregate y no existe independientemente de `Project`. Toda modificación relevante pasa por la API de `Project`; Handlers y adaptadores no manipulan directamente la colección. `MediaType` puede distinguir conceptualmente `Image` y `Video` si la implementación confirma que es necesario.
+
+### `CorporateClient` — Aggregate Root
+
+```text
+CorporateClient
+├── CorporateClientId
+├── CorporateClientName
+├── Logo / MediaReference
+└── VisibilityStatus
+```
+
+Representa una empresa o marca con la que Cromática Creativa ha trabajado. Puede existir independientemente de un `Project`. El proyecto mantiene como máximo su identificador o referencia aprobada, nunca el Aggregate completo. `VisibilityStatus` conserva su significado propio y no se reemplaza por el estado `Active`/`Inactive` de Services.
+
+## Modelo de `Services`
+
+`Services` representa la oferta comercial actual y puede evolucionar si en el futuro algún servicio se solicita o ejecuta desde el sitio. Sus Aggregate Roots iniciales son `Service` y `ServiceCategory`; no existe un módulo `Categories`.
+
+### `Service` — Aggregate Root
+
+```text
+Service
+├── ServiceId
+├── ServiceName
+├── Description
+├── Image / MediaReference
+├── ServiceStatus
+│   ├── Active
+│   └── Inactive
+└── DisplayOrder
+```
+
+Solo un `Service` Active forma parte de la oferta pública. Un Service Inactive continúa disponible administrativamente en Directus y no se elimina automáticamente.
+
+### `ServiceCategory` — Aggregate Root
+
+```text
+ServiceCategory
+├── ServiceCategoryId
+├── ServiceId
+├── ServiceCategoryName
+├── Description
+├── ReferenceImage / MediaReference
+├── ServiceCategoryStatus
+│   ├── Active
+│   └── Inactive
+└── DisplayOrder
+```
+
+`ServiceCategory` tiene identidad y ciclo de vida propios, se administra individualmente, se consulta y filtra públicamente y puede ser referenciada por Project. Cada Category pertenece a exactamente un Service; Application debe poder comprobar que la Category pertenece al Service indicado.
+
+Solo una ServiceCategory Active cuyo Service padre también esté Active puede exponerse como categoría pública disponible. No se ha decidido que desactivar una categoría o su Service oculte automáticamente Projects históricos relacionados.
+
+Cada `ServiceCategory` debe tener `ReferenceImage`: una imagen ilustrativa que ayuda al Cliente a comprender el tipo de trabajo. No es un Project real ni equivale a `ProjectMedia`, que contiene fotografías o videos reales de un trabajo realizado.
+
+## Relación `Portfolio` → `Services`
+
+`Portfolio.Domain` no depende de `Services.Domain`, sus identificadores ni sus Aggregate Roots. `Project` usa Value Objects propios:
+
+```text
+Project
+├── ProjectServiceReference
+└── ProjectCategoryReference
+```
+
+`Portfolio.Application` recibe la selección, consulta un contrato mínimo de `Services/public/`, verifica que Service y Category existan, que la Category pertenezca al Service y las condiciones de estado necesarias para el caso de uso. Solo después crea las referencias propias de Portfolio.
+
+```mermaid
+flowchart LR
+    input["Service + Category"] --> portfolioApp["Portfolio.Application"]
+    portfolioApp --> servicesPublic["Services / public"]
+    servicesPublic --> validation["Existencia, pertenencia y estado"]
+    validation --> references["ProjectServiceReference + ProjectCategoryReference"]
+    references --> project["Project"]
+    portfolioDomain["Portfolio.Domain"] -. "no depende" .-> servicesDomain["Services.Domain"]
+```
+
+La implementación inicial de cada referencia almacena únicamente un `Guid` no vacío propio de `Portfolio.Domain`; no importa identificadores ni Aggregates de `Services.Domain`. Incorporar snapshots en el futuro requerirá un requisito nuevo. No se fijan interfaces/facades antes de que un caso de uso las necesite.
+
+### Filtros públicos
+
+La arquitectura permite consultar la oferta como `Service → ServiceCategories activas` y filtrar el portafolio por Service y ServiceCategory. El resultado de Portfolio incluye únicamente Projects que cumplan sus reglas públicas de publicación. Estas capacidades son requisitos conceptuales; no fijan rutas HTTP ni declaran endpoints implementados.
+
+## Modelo de `CompanyProfile`
+
+`CompanyProfile` reúne la información administrable para contactar y localizar a Cromática Creativa:
+
+```text
+CompanyContactInformation [Aggregate Root]
+├── CompanyContactInformationId
+├── PhoneNumber?
+├── PhoneNumber? WhatsApp
+├── PublicEmail?
+├── ContactRequestRecipientEmail
+├── SocialLink[] [Value Objects]
+└── CompanyLocation? [Entity]
+```
+
+`CompanyContactInformation` controla el ciclo de vida de su ubicación y redes sociales. `CompanyLocation` no es Aggregate Root ni módulo independiente:
+
+```text
+CompanyLocation
+├── CompanyLocationId
+├── Address
+└── GeoCoordinates?
+```
+
+`SocialLink` es un Value Object inmutable, sin `SocialLinkId`, compuesto conceptualmente por `SocialNetwork` y `ExternalUrl`. Cuando cambia una URL, se reemplaza el valor.
+
+`ContactRequestRecipientEmail` es el correo receptor administrable de las solicitudes. Es distinto de `PublicEmail` y del correo emisor técnico del proveedor, y no se hardcodea en `Contact`, React o Infrastructure.
+
+El contrato de `CompanyProfile/public/` que permite obtenerlo es público entre módulos, no necesariamente HTTP. El destinatario no se expone al Cliente o React sin un requisito explícito independiente.
+
+Teléfono, WhatsApp, correo público, SocialLinks y CompanyLocation se exponen públicamente solo cuando estén configurados conforme a las reglas del Aggregate. La opcionalidad no justifica inventar estados o Entities adicionales.
+
+## Modelo de `Contact`
+
+`Contact` tiene una única responsabilidad: procesar solicitudes enviadas por Clientes desde el formulario. No administra teléfonos, redes sociales, ubicación ni correo público de Cromática Creativa.
+
+```text
+ContactRequest [Aggregate Root]
+├── ContactRequestId
+├── PersonName
+├── CompanyName?
+├── EmailAddress
+├── PhoneNumber
+├── RequestType
+├── RequestedServiceReference
+└── Message?
+```
+
+`ContactRequest` representa una solicitud válida y protege sus reglas propias. `RequestType` contiene inicialmente `InformationRequest` y `ServiceRequest`; `Message` permanece opcional. Ser Aggregate Root define un límite de consistencia; no obliga a crear una tabla ni a persistir históricamente las solicitudes en V1. El Aggregate tampoco envía correo: ese efecto pertenece a Application mediante un port.
+
+Los Value Objects conceptuales confirmados por contexto son:
+
+| Contexto | Value Objects |
+| --- | --- |
+| `Portfolio` | `ProjectId`, `ProjectMediaId`, `CorporateClientId`, `ProjectTitle`, `CorporateClientName`, `MediaReference`, `DisplayOrder`, `ProjectPeriod`, `ProjectServiceReference`, `ProjectCategoryReference` |
+| `Services` | `ServiceId`, `ServiceName`, `ServiceCategoryId`, `ServiceCategoryName`, `MediaReference`, `DisplayOrder` |
+| `CompanyProfile` | `CompanyContactInformationId`, `CompanyLocationId`, `EmailAddress`, `PhoneNumber`, `Address`, `GeoCoordinates`, `ExternalUrl`, `SocialLink` |
+| `Contact` | `ContactRequestId`, `PersonName`, `EmailAddress`, `PhoneNumber`, `RequestedServiceReference` |
+
+Estos Value Objects ya están implementados dentro del proyecto Domain de su contexto. Los nombres repetidos conservan implementaciones independientes y no crean un Shared Kernel.
+
+## Anatomía de un módulo
+
+La separación de capas se materializa en proyectos distintos:
+
+```mermaid
+flowchart LR
+    presentation["{Context}.Presentation.csproj"] --> application["{Context}.Application.csproj"]
+    application --> domain["{Context}.Domain.csproj"]
+    infrastructure["{Context}.Infrastructure.csproj"] --> application
+    infrastructure --> domain
+```
+
+Estructura física aprobada, ejemplificada con `Portfolio`:
 
 ```text
 modules/
-└── projects/
-    ├── public/
-    │   ├── contracts/
-    │   ├── dtos/
-    │   └── events/
-    └── internal/
-        ├── domain/
-        │   ├── entities/
-        │   ├── aggregates/
-        │   ├── value-objects/
-        │   ├── services/
-        │   ├── events/
-        │   ├── exceptions/
-        │   └── abstractions/
-        ├── application/
-        │   ├── commands/
-        │   │   └── UseCase/
-        │   │       ├── UseCaseCommand.cs
-        │   │       ├── UseCaseCommandHandler.cs
-        │   │       └── UseCaseCommandValidator.cs  # solo si se necesita
-        │   ├── queries/
-        │   │   └── UseCase/
-        │   │       ├── UseCaseQuery.cs
-        │   │       ├── UseCaseQueryHandler.cs
-        │   │       └── UseCaseDto.cs               # solo si es local
-        │   └── ports/
-        │       ├── IClock.cs                     # ejemplo conceptual
-        │       └── ...
-        ├── infrastructure/
-        │   ├── persistence/
-        │   ├── time/
-        │   ├── email/
-        │   ├── storage/
-        │   └── integrations/
-        └── presentation/
+└── Portfolio/
+    ├── CromaticaCreativa.Modules.Portfolio.Domain/
+    │   ├── Aggregates/
+    │   ├── Entities/
+    │   ├── Enums/
+    │   ├── Exceptions/
+    │   └── ValueObjects/
+    ├── CromaticaCreativa.Modules.Portfolio.Application/
+    ├── CromaticaCreativa.Modules.Portfolio.Infrastructure/
+    └── CromaticaCreativa.Modules.Portfolio.Presentation/
 ```
 
-Esta estructura es una guía, no una plantilla que deba materializarse completa. `UseCase` representa el nombre técnico en inglés de un caso real, no una carpeta literal. Solo se crean carpetas y archivos cuando contienen responsabilidades reales; la capitalización y distribución física definitivas permanecen pendientes.
+El mismo patrón se aplica a `Services`, `CompanyProfile` y `Contact`. `backend/Directory.Build.props` centraliza `net10.0`, nullable reference types e implicit usings; `global.json` fija el SDK `10.0.302`. Application y Presentation permanecen sin lógica funcional. Los Infrastructure de `Portfolio`, `Services` y `CompanyProfile` contienen su persistencia y referencian exclusivamente al Domain del mismo contexto para sus mappers; `Contact.Infrastructure` permanece vacío y sin referencias anticipadas.
 
 ### `public` frente a `internal`
 
-`public/` es el único punto permitido de interacción desde otros módulos. Puede contener DTOs, contratos/facades e integration events estables. Debe exponer la superficie mínima necesaria y evitar filtrar Entities, tipos de persistencia o detalles internos.
+La frontera `public` será el único punto permitido de interacción desde otros módulos. Se materializará cuando una historia de usuario necesite DTOs, contratos/facades o Integration Events estables; no existe todavía un proyecto `Contracts` o `Public` porque no hay consumidor real.
 
-`internal/` contiene toda la implementación privada. Ningún otro módulo puede importarla, instanciarla o depender de ella. Esta regla aplica incluso si el lenguaje, el proyecto físico o la visibilidad del compilador permiten técnicamente hacerlo.
+Los cuatro proyectos de capa contienen la implementación propia del Bounded Context. Ningún otro módulo puede importar, instanciar o depender de sus tipos internos sin atravesar el futuro contrato público explícito.
 
 `public/` no equivale a endpoint público. Un contrato entre módulos puede no tener representación HTTP; un endpoint pertenece a Presentation y responde al contrato externo de la API REST.
 
@@ -224,7 +416,7 @@ No depende de Application, Infrastructure, Presentation, EF Core, ASP.NET Core, 
 
 Las **Entities** tienen identidad y ciclo de vida. Un **Aggregate** define un límite de consistencia y su Aggregate Root protege las invariantes internas. Cuando existan comportamientos como publicar, cambiar un título o asociar multimedia, Application debe invocar la API explícita del Aggregate en vez de modificar su estado por setters o reproducir sus condiciones en el Handler. Esos comportamientos son ejemplos potenciales, no métodos ya definidos.
 
-Los **Value Objects** pertenecen a Domain cuando un concepto se define por sus valores, protege invariantes, necesita validación coherente o evita primitivas ambiguas. Deben ser inmutables, válidos desde su creación, comparados por valor e independientes de Infrastructure. `ProjectSlug`, `EmailAddress` o `PhoneNumber` son ejemplos posibles, no tipos obligatorios. No se permite crear primero un Value Object inválido para validarlo después en Application.
+Los **Value Objects** pertenecen a Domain cuando un concepto se define por sus valores, protege invariantes, necesita validación coherente o evita primitivas ambiguas. Deben ser inmutables, válidos desde su creación, comparados por valor e independientes de Infrastructure. Los Value Objects confirmados se enumeran en el modelo de cada contexto; no se permite crear primero uno inválido para validarlo después en Application.
 
 Los **Domain Services** se reservan para reglas de dominio que no pertenecen naturalmente a una Entity, Aggregate o Value Object. Los **Domain Events** representan hechos relevantes ya ocurridos; no se crean para cada CRUD.
 
@@ -332,7 +524,7 @@ sequenceDiagram
 
 ### Correo y otros servicios externos
 
-El correo sigue el mismo patrón: Application declara un port orientado a enviar el mensaje que el caso de uso requiere; Infrastructure adapta el proveedor seleccionado. Application no crea `SmtpClient`, no referencia SDKs y no conoce credenciales, destinatarios configurados ni detalles del transporte. El proveedor y el contrato definitivo permanecen pendientes.
+El correo sigue el mismo patrón: Application declara un port orientado a enviar el mensaje que el caso de uso requiere; Infrastructure adapta el proveedor seleccionado. Application no crea `SmtpClient`, no referencia SDKs y no conoce credenciales, configuración del `From` ni detalles del transporte. En Contact, el Handler recibe el `To` desde `CompanyProfile/public/`. El proveedor y el contrato técnico definitivo permanecen pendientes.
 
 Filesystem, almacenamiento multimedia, read stores y APIs externas se tratan del mismo modo. El port debe expresar la capacidad mínima necesaria para el caso de uso, no reproducir la API del proveedor ni convertirse en un Generic Repository.
 
@@ -355,9 +547,9 @@ application/
 │       ├── PublishProjectCommandHandler.cs
 │       └── PublishProjectCommandValidator.cs  # opcional
 └── queries/
-    └── GetProjectBySlug/
-        ├── GetProjectBySlugQuery.cs
-        ├── GetProjectBySlugQueryHandler.cs
+    └── GetProjectById/
+        ├── GetProjectByIdQuery.cs
+        ├── GetProjectByIdQueryHandler.cs
         └── ProjectDto.cs                       # local si corresponde
 ```
 
@@ -389,15 +581,14 @@ Las lecturas públicas serán principalmente Queries. El formulario público es 
 
 “Leer mediante EF Core” significa que el Handler usa un port de Application implementado por Infrastructure; Application no referencia `DbContext`. Una Query puede utilizar un read port con `AsNoTracking()` y proyección directa a DTO sin cargar un Aggregate cuando solo necesita datos. Un Command carga el estado requerido, invoca Domain y coordina ports; no implementa dentro del Handler reglas que pertenecen al modelo de dominio.
 
-| Módulo | Commands conceptuales | Queries conceptuales |
+| Bounded Context | Commands conceptuales | Queries conceptuales |
 | --- | --- | --- |
-| `Projects` | `CreateProjectCommand`, `UpdateProjectCommand`, `DeleteProjectCommand` | `GetProjectsQuery`, `GetProjectByIdQuery` o `GetProjectBySlugQuery` |
-| `CorporateClients` | `CreateCorporateClientCommand`, `UpdateCorporateClientCommand`, `DeleteCorporateClientCommand` | `GetCorporateClientsQuery` |
-| `Services` | `CreateServiceCommand`, `UpdateServiceCommand`, `DeleteServiceCommand` | `GetServicesQuery` |
-| `Contact` | `SubmitContactRequestCommand` o `SendContactRequestCommand`; Commands administrativos de información de contacto solo si el modelo los requiere | Query pública de información de contacto por definir cuando exista el caso de uso |
-| `Location` | `CreateLocationCommand` solo si el modelo lo requiere; `UpdateLocationCommand` | Query pública por definir cuando exista el caso de uso |
+| `Portfolio` | Commands de Project o CorporateClient solo para casos reales | `GetProjectsQuery`, `GetProjectByIdQuery` o consultas de CorporateClient |
+| `Services` | Commands de Service o ServiceCategory solo para casos reales | `GetServicesQuery` y consultas de categorías requeridas por consumidores reales |
+| `CompanyProfile` | Commands para administrar `CompanyContactInformation` cuando existan | Queries de información pública o contrato interno para el destinatario |
+| `Contact` | `SubmitContactRequestCommand` | No se anticipan Queries sin una necesidad real, especialmente mientras no haya persistencia histórica |
 
-Todos son ejemplos conceptuales; no representan código ni endpoints implementados.
+Todos son ejemplos conceptuales; no representan código ni endpoints implementados. `GetProjectsQuery` pertenece a `Portfolio.Application`: el plural Projects describe el caso de uso y no un módulo independiente.
 
 No se crearán mensajes CRUD ajenos al ERS. CQRS no implica Event Sourcing y este proyecto no utilizará Event Sourcing salvo decisión futura explícita.
 
@@ -405,17 +596,9 @@ Para una mutación originada en Directus, `Command` describe la intención y el 
 
 ## Formulario público de contacto
 
-El módulo `Contact` gestiona dos capacidades relacionadas: la información pública de contacto y redes sociales de Cromática Creativa, y el caso de uso mediante el cual un Cliente envía una solicitud a la empresa. El formulario amplía el módulo existente; no justifica por sí solo crear otro módulo ni responsabilidades ajenas al contacto.
+El Bounded Context `Contact` procesa la solicitud; `CompanyProfile` administra los datos corporativos. El formulario no justifica mezclar ambas responsabilidades.
 
-La solicitud contempla conceptualmente:
-
-- Nombre y apellido del Cliente.
-- Correo electrónico del Cliente.
-- Nombre de la empresa.
-- Teléfono del Cliente.
-- Tipo de solicitud: solicitar información, solicitar un servicio u otra solicitud relacionada con la empresa, sin ampliar el catálogo sin necesidad.
-- Identificador del servicio solicitado.
-- Mensaje o descripción cuando el diseño funcional lo requiera.
+La solicitud se representa en Domain mediante `ContactRequest`, con `PersonName`, empresa opcional, `EmailAddress`, `PhoneNumber`, `RequestType`, `RequestedServiceReference` y mensaje opcional. `RequestType` admite actualmente `InformationRequest` y `ServiceRequest`; ampliar ese catálogo requerirá un requisito explícito. La obligatoriedad futura de `Message` permanece pendiente.
 
 Flujo de envío:
 
@@ -425,21 +608,32 @@ flowchart LR
     react --> api["ASP.NET Core"]
     api --> presentation["Presentation"]
     presentation --> mediator["MediatR"]
-    mediator --> handler["Application Command Handler"]
-    handler --> domain["Domain"]
+    mediator --> handler["SubmitContactRequestCommandHandler"]
+    handler --> services["Services / public"]
+    handler --> profile["CompanyProfile / public"]
+    handler --> domain["ContactRequest.Create(...)"]
     handler --> emailPort["Application Email Port"]
     emailAdapter["Infrastructure / Email Adapter"] -. "implementa" .-> emailPort
     emailAdapter --> provider["Proveedor de correo"]
-    provider --> company["Correo de Cromática Creativa"]
+    profile --> recipient["ContactRequestRecipientEmail"]
+    provider --> recipient
 ```
 
-El Command —con nombre exacto pendiente— representa la intención de contactar y coordina validación, reglas y entrega; no es una Query. Application declara el port de salida orientado a la capacidad requerida e Infrastructure implementa el adaptador técnico. Application y Domain no conocen SMTP, SDKs ni proveedores concretos. El proveedor, la dirección receptora y las estrategias de `From`, `Reply-To`, asunto, HTML y texto plano permanecen pendientes. La dirección receptora será configurable fuera de Domain y React, y las credenciales permanecerán fuera del repositorio.
+`SubmitContactRequestCommand` representa la intención y su Handler orquesta validación, contratos públicos, Domain y entrega. Application declara el email port e Infrastructure implementa el adaptador. Application y Domain no conocen SMTP, SDKs ni proveedores concretos.
 
-El correo debe estructurar los datos útiles de la solicitud y permitir que la empresa identifique al Cliente y responda a su dirección. El correo aportado por el Cliente es información de contacto; no se asume que pueda usarse como `From`, porque el proveedor podría exigir una dirección de dominio verificado.
+La separación del mensaje es obligatoria:
 
-Directus y los Filter Hooks administrativos no participan en este flujo. React tampoco envía el correo ni accede a PostgreSQL. El requisito actual solo exige procesar y entregar la solicitud: no se crea automáticamente una Entity o tabla `ContactRequest`, ni se asume persistencia histórica. Si posteriormente se requiere almacenar solicitudes, deberá aprobarse como una capacidad funcional y modelarse con identidad y ciclo de vida justificados.
+| Campo técnico | Origen |
+| --- | --- |
+| `From` | Dirección técnica controlada por Cromática Creativa o requerida por el proveedor, configurada en Infrastructure |
+| `To` | `ContactRequestRecipientEmail`, obtenido mediante `CompanyProfile/public/` |
+| `Reply-To` | `EmailAddress` aportado por el Cliente y validado dentro de la solicitud |
 
-### Relación entre `Contact` y `Services`
+Proveedor, asunto, HTML y texto plano permanecen pendientes. El Cliente nunca controla `From`, `To`, credenciales o plantillas.
+
+Directus y los Filter Hooks administrativos no participan en este flujo. React tampoco envía correo ni accede a PostgreSQL. `ContactRequest` es Aggregate Root aunque su persistencia histórica continúe pendiente; no se crea una tabla automáticamente.
+
+### Relaciones de `Contact.Application`
 
 React construye el selector a partir de servicios públicos obtenidos mediante el flujo existente:
 
@@ -449,13 +643,15 @@ Cliente → React → ASP.NET Core → GetServicesQuery → EF Core → PostgreS
 
 El nombre `GetServicesQuery` es conceptual y no afirma implementación. Al enviar el formulario, el Cliente proporciona un identificador apropiado, no texto arbitrario que suplante al servicio. Application vuelve a comprobar que el servicio existe, es válido y, si el modelo incorpora ese concepto, está disponible o publicado.
 
-`Contact` no puede acceder a `Services/internal/`, a su `DbContext` ni a sus tablas. La verificación debe atravesar un contrato mínimo de `Services/public/` o el mecanismo interno que se apruebe, sin fijar todavía nombres de interfaces. La lista de servicios no se duplica manualmente en `Contact` ni en React.
+`Contact` no puede acceder a `Services/internal/`, a su `DbContext` ni a sus tablas. La verificación atraviesa un contrato mínimo de `Services/public/`, sin fijar todavía nombres de interfaces. La lista de servicios no se duplica manualmente en `Contact` ni en React.
+
+El Handler obtiene `ContactRequestRecipientEmail` mediante `CompanyProfile/public/`; no accede a `CompanyProfile/internal/` ni trata el destinatario como configuración técnica del adaptador de correo.
 
 ### Validación, seguridad y resultados
 
 - React aporta UX: campos requeridos, formato visual, límites de longitud, selector y feedback inmediato; estas comprobaciones no son una frontera de seguridad.
 - Presentation/Application vuelven a validar obligatoriedad, formatos, longitudes, correo, teléfono según reglas aprobadas, tipo de solicitud, servicio y consistencia.
-- Domain protege únicamente reglas reales independientes de HTTP y puede incorporar Value Objects justificados; no se crean wrappers ceremoniales.
+- Domain crea un `ContactRequest` válido y protege sus invariantes; el Aggregate no conoce Services, CompanyProfile ni el proveedor de correo.
 - Infrastructure se limita a la entrega técnica del correo y traduce fallos del proveedor sin filtrar sus detalles.
 - El endpoint será público y sin autenticación. Antes de producción deben evaluarse rate limiting, spam, automatización abusiva, límites de tamaño, tratamiento seguro del contenido y observabilidad. CAPTCHA es una alternativa posible, no una decisión obligatoria.
 - Ningún parámetro del Cliente puede decidir destinatarios, encabezados, plantillas, credenciales o configuración interna.
@@ -468,15 +664,42 @@ EF Core es el ORM y propietario de la definición versionada del esquema. El pro
 
 ```mermaid
 flowchart TD
-    model["Domain Model"] --> mapping["EF Core Configuration"]
+    domain["Domain Model"] <--> mapper["Persistence Mapper"]
+    mapper <--> model["Persistence Models"]
+    model --> mapping["EF Core Configuration"]
     mapping --> migration["EF Core Migration versionada"]
     migration --> review["Revisión"]
     review --> database[("PostgreSQL")]
     database --> directus["Directus introspecciona el esquema existente"]
 ```
 
-- Los mappings permanecen en Infrastructure.
+- Domain y Persistence son modelos distintos. Los Aggregates, Entities y Value Objects de Domain no son entidades EF, no reciben atributos de persistencia y no aparecen en `DbSet`.
+- Los Persistence Models técnicos usan el sufijo `Model`; las configuraciones y mappers permanecen en Infrastructure.
 - Las migrations son la única vía aprobada para evolucionar el esquema desde la aplicación.
+- `PortfolioDbContext` posee el schema `portfolio`, sus tablas y sus migrations.
+- `ServicesDbContext` posee el schema `services`, sus tablas y sus migrations.
+- `CompanyProfileDbContext` posee el schema `company_profile`, sus tablas y sus migrations.
+- Cada contexto usa `schema.__ef_migrations_history`. No existe un `DbContext` global ni migrations compartidas.
+- `Contact` no tiene `ContactDbContext`; `ContactRequest` permanece exclusivamente en Domain y no tiene tabla.
+- Las tablas y columnas son singulares `snake_case`; constraints e índices tienen nombres explícitos `pk_`, `fk_`, `uq_`, `ck_` e `ix_`.
+- Las FKs solo existen dentro del Bounded Context propietario. `portfolio.project.service_id` y `category_id` son UUID opacos sin FK ni navegación hacia Services; Application validará esas referencias mediante contratos públicos futuros.
+- `CorporateClient → Project` y `Service → Category` usan `RESTRICT`; `Project → Media` y los hijos relacionales de CompanyProfile usan `CASCADE`.
+- `media.is_cover` y un índice único parcial por `project_id` garantizan como máximo una portada por Project.
+- `company_profile.singleton_key = 1`, con `UNIQUE`, garantiza una única fila raíz de CompanyProfile.
+
+| Contexto | Persistence Model | Tabla física |
+| --- | --- | --- |
+| Portfolio | `ProjectModel` | `portfolio.project` |
+| Portfolio | `MediaModel` | `portfolio.media` |
+| Portfolio | `CorporateClientModel` | `portfolio.corporate_client` |
+| Services | `ServiceModel` | `services.service` |
+| Services | `CategoryModel` | `services.category` |
+| CompanyProfile | `CompanyProfileModel` | `company_profile.company_profile` |
+| CompanyProfile | `PhoneModel` | `company_profile.phone` |
+| CompanyProfile | `EmailModel` | `company_profile.email` |
+| CompanyProfile | `LocationModel` | `company_profile.location` |
+| CompanyProfile | `SocialLinkModel` | `company_profile.social_link` |
+
 - ASP.NET Core usa EF Core para consultas públicas y para recuperar estado durante el procesamiento de una mutación.
 - Directus lee directamente las tablas del dominio para consultas administrativas.
 - Directus ejecuta el `INSERT`, `UPDATE` o `DELETE` final después de la aprobación del Filter Hook.
@@ -485,7 +708,7 @@ flowchart TD
 - El acceso compartido a PostgreSQL no elimina el ownership modular de los datos.
 - Las Queries públicas deben proyectar solo campos necesarios, evitar N+1 y usar `AsNoTracking()` cuando corresponda.
 
-La estrategia de uno o varios `DbContext`, esquemas PostgreSQL, transacciones entre módulos y ownership físico de migrations se decidirá durante la fundación técnica.
+La topología física está registrada en ADR-013. Los límites transaccionales de futuros casos de uso aún se definirán por capacidad; compartir una base no autoriza transacciones o acceso directo entre implementaciones de contextos.
 
 ## Directus
 
@@ -524,6 +747,8 @@ flowchart LR
 
 El Filter Hook se ejecuta antes de persistir, espera la respuesta del backend, cancela la mutación rechazada y puede reemplazar o normalizar el payload aprobado. Directus realiza después el único `INSERT`, `UPDATE` o `DELETE`. La comunicación Hook → ASP.NET Core deberá autenticarse y autorizarse antes de producción, pero el mecanismo técnico aún no se ha decidido.
 
+El mismo flujo se aplica a mutaciones administrativas de Project, ProjectMedia, CorporateClient, Service, ServiceCategory, CompanyContactInformation y CompanyLocation. La pertenencia de estos conceptos a contextos distintos no permite saltarse sus Commands, invariantes o Filter Hooks.
+
 ### Persistencia interna de Directus
 
 Los datos internos del CMS —configuración, usuarios, sesiones, roles, policies, permissions y metadata— son responsabilidad de Directus. Los datos del dominio comparten PostgreSQL técnicamente entre Directus y ASP.NET Core, pero su estructura pertenece a EF Core Migrations.
@@ -532,7 +757,7 @@ Los datos internos del CMS —configuración, usuarios, sesiones, roles, policie
 
 Permanece en código: misión, visión, descripción institucional general, eslóganes y textos corporativos de muy baja frecuencia de modificación. No se modelará `SiteSettings` ni un módulo equivalente solo para almacenarlos.
 
-Se administra mediante Directus: proyectos, multimedia de proyectos, Clientes Corporativos, servicios, información de contacto, redes sociales y ubicación. Directus lee estos datos directamente y persiste las mutaciones solo después de procesarlas mediante Filter Hooks y ASP.NET Core. No convierte automáticamente todo el contenido del sitio en administrable.
+Se administra mediante Directus: Projects, ProjectMedia y CorporateClients de `Portfolio`; Services y ServiceCategories; y CompanyContactInformation, CompanyLocation y redes sociales de `CompanyProfile`. Directus lee estos datos directamente y persiste las mutaciones solo después de procesarlas mediante Filter Hooks y ASP.NET Core. No convierte automáticamente todo el contenido del sitio en administrable.
 
 ## DTOs y fronteras HTTP
 
@@ -574,7 +799,7 @@ En el formulario público, React aporta únicamente la capa de UX; Directus no i
 
 ## Eventos
 
-Los **Domain Events** representan hechos relevantes ocurridos dentro del dominio, permanecen dentro del monolito y pueden despacharse mediante MediatR u otro mecanismo interno apropiado. `ProjectPublishedDomainEvent` es un ejemplo conceptual; no se crearán eventos para cada operación CRUD.
+Los **Domain Events** representan hechos relevantes ocurridos dentro del dominio, permanecen dentro del monolito y pueden despacharse mediante MediatR u otro mecanismo interno apropiado. No se ha confirmado ninguno para el modelo inicial y no se crearán eventos para cada operación CRUD.
 
 Los **Integration Events** se destinan a otros módulos, sistemas o integraciones y solo se introducen cuando existe un consumidor real. No se incorporarán Kafka, RabbitMQ, Service Bus ni otro message broker en la V1 sin un requisito explícito.
 
@@ -582,7 +807,9 @@ CQRS y Event Sourcing son conceptos distintos. No se utilizará Event Sourcing s
 
 ## Multimedia
 
-El archivo físico y la metadata o referencia del dominio son responsabilidades diferentes. Las imágenes y videos no se almacenan como BLOB o base64 dentro de Entities de PostgreSQL; las tablas del dominio conservan únicamente las referencias necesarias y la asociación con `Project` o `ProjectMedia` se realiza mediante ASP.NET Core.
+El archivo físico y la metadata o referencia del dominio son responsabilidades diferentes. Las imágenes y videos no se almacenan como BLOB o base64 dentro de Entities de PostgreSQL; las tablas del dominio conservan únicamente las referencias necesarias y la asociación de `ProjectMedia` con `Project` se realiza mediante ASP.NET Core y la API del Aggregate.
+
+`ServiceCategory.ReferenceImage` puede utilizar conceptualmente un `MediaReference`, pero expresa una imagen ilustrativa del tipo de trabajo. `ProjectMedia` representa multimedia real de un Project realizado. Compartir el tipo técnico de referencia no mezcla sus significados ni crea un módulo `Media`.
 
 En la V1, Directus podrá realizar físicamente el upload a almacenamiento persistente del servidor VPS y obtener una referencia. La mutación que asocia esa referencia se interceptará igual que cualquier otra operación de dominio:
 
@@ -632,7 +859,7 @@ frontend/
 
 La estructura es conceptual, puede evolucionar y no debe materializarse mediante carpetas vacías. Sus responsabilidades son:
 
-- `app/`: composición global, routing, providers y configuración de React. No contiene lógica específica de Projects, Services o Contact.
+- `app/`: composición global, routing, providers y configuración de React. No contiene lógica específica de Portfolio, Services, CompanyProfile o Contact.
 - `pages/`: pantallas o rutas completas. Una Page compone features y componentes, y evita detalles directos de acceso HTTP.
 - `features/`: comportamiento cohesivo de una capacidad del frontend. Puede contener componentes, hooks y tipos específicos, pero no se crea una feature por cada componente pequeño ni se duplican componentes realmente globales.
 - `components/`: UI reutilizable —por ejemplo Header, Footer, Button, cards o campos— sin conocimiento de EF Core, Directus, PostgreSQL, Entities .NET, URLs hardcodeadas ni requests arbitrarios.
@@ -673,7 +900,9 @@ La frontera de tipos es explícita:
 
 No se comparten automáticamente clases de Domain con React. Tipos potenciales como `ProjectSummary`, `ProjectDetail`, `Service` o `ContactFormData` solo se adoptarán si los contratos y la UI reales los justifican.
 
-Para contacto, el flujo conceptual llega desde `ContactPage` a la feature, al hook de formulario si aporta comportamiento React y al service/API client. ASP.NET Core despacha el Command a su Handler de Application; el Handler invoca Domain y el Application Email Port que Infrastructure implementa. El selector reutiliza los servicios públicos de la API; React no conserva otra lista autoritativa, no envía correo y no conoce credenciales, destinatarios o configuración del proveedor.
+La página de Services presenta Services Active con sus ServiceCategories Active cuando el Service padre también esté Active. Una categoría puede mostrar nombre, descripción y `ReferenceImage`. La página de Portfolio puede filtrar Projects publicados por Service y ServiceCategory. El detalle de Project puede mostrar título, descripción, CorporateClient, Service, ServiceCategory y ProjectMedia. `ProjectPeriod` existe en Domain, pero la exposición de `StartDate`, `EndDate` o `TotalDays` permanece pendiente.
+
+Para contacto, el flujo conceptual llega desde `ContactPage` a la feature, al hook de formulario si aporta comportamiento React y al service/API client. ASP.NET Core despacha `SubmitContactRequestCommand`; el Handler valida Services, obtiene el destinatario desde CompanyProfile, crea el Aggregate y usa el Application Email Port. React no conserva catálogos autoritativos, no envía correo y no conoce credenciales, `From` técnico o destinatarios configurables.
 
 ## Comunicación entre módulos y Bounded Contexts
 
@@ -748,23 +977,22 @@ Estos nombres de fakes describen una técnica de test, no fijan un framework ni 
 
 ## Decisiones vigentes
 
-Las decisiones aprobadas son: monolito modular, DDD pragmático, arquitectura hexagonal con dependencias hacia el núcleo, CQRS con MediatR, EF Core como autoridad del esquema PostgreSQL, Directus conectado al esquema del dominio, Filter Hooks bloqueantes para mutaciones administrativas, React modular como frontend público y contenido institucional estático en código. Su contexto y consecuencias están registrados en [DECISIONS.md](DECISIONS.md).
+Las decisiones aprobadas son: monolito modular, los cuatro Bounded Contexts iniciales, DDD pragmático, arquitectura hexagonal con dependencias hacia el núcleo, .NET 10 y proyectos separados por capa, CQRS con MediatR, EF Core como autoridad del esquema PostgreSQL, Persistence separado de Domain, tres `DbContext` y schemas con migrations propias, ausencia de persistencia para Contact, referencias UUID opacas entre Portfolio y Services, Directus conectado al esquema del dominio, Filter Hooks bloqueantes para mutaciones administrativas, React modular como frontend público y contenido institucional estático en código. Su contexto y consecuencias están registrados en [DECISIONS.md](DECISIONS.md).
 
 ## Decisiones abiertas
 
-- Versiones de .NET, React, PostgreSQL, Directus y dependencias.
-- Estructura física de solución, proyectos `.csproj` y namespaces.
+- Versiones de React, PostgreSQL, Directus y dependencias externas distintas de EF Core/Npgsql.
 - Controllers o Minimal APIs.
-- Uno o varios `DbContext` y organización de migrations.
-- Correspondencia definitiva entre módulos y Bounded Contexts, lenguaje ubicuo y límites transaccionales.
-- Modelo inicial y detalles definitivos de Projects, CorporateClients, Services, Contact y Location.
+- Límites transaccionales de futuros casos de uso.
+- Efecto de desactivar Service/ServiceCategory sobre Projects históricos relacionados.
+- Exposición pública de `ProjectPeriod`: fechas, duración o ninguna.
 - Estructura física final del frontend, routing, providers y herramientas adicionales.
 - Implementación de almacenamiento de imágenes/videos y posible uso de URLs externas.
 - Permisos, metadata y configuración operativa de Directus.
 - Mecanismo de autenticación y autorización Directus → ASP.NET Core.
 - Detalles de implementación y cobertura de Filter Hooks por colección/operación.
 - Contrato definitivo del formulario y catálogo final de tipos de solicitud.
-- Proveedor de correo, dirección receptora configurable y estrategias de `From`, `Reply-To`, asunto y plantillas.
+- Proveedor de correo, configuración técnica de `From`, asunto y plantillas. `To` procede de CompanyProfile y `Reply-To` del solicitante.
 - Política antiabuso del formulario: rate limiting, spam, automatización, límites y posible CAPTCHA si se justifica.
 - Necesidad o no de persistencia histórica de solicitudes de contacto.
 - Estrategia y frameworks de testing.

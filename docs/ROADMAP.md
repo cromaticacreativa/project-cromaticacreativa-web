@@ -13,16 +13,17 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [x] Documentar el requisito y flujo conceptual del formulario público de contacto.
 - [x] Documentar contenido estático, DTOs, validación, eventos y multimedia.
 - [x] Precisar DDD pragmático, Bounded Contexts, dependencias hexagonales y arquitectura modular React.
-- [ ] Resolver decisiones abiertas necesarias para la fundación técnica.
-- [ ] Validar con el equipo los módulos conceptuales iniciales.
+- [x] Formalizar los Bounded Contexts iniciales `Portfolio`, `Services`, `CompanyProfile` y `Contact`.
+- [x] Resolver framework, SDK, solución, namespace raíz y organización física inicial del backend.
 
 ## Fase 1 — Fundación técnica
 
-- [ ] Seleccionar versiones soportadas del stack.
-- [ ] Definir estructura física de la solución .NET y namespaces.
+- [x] Seleccionar .NET 10 (`net10.0`) y fijar el SDK 10.0.302.
+- [x] Definir `backend/CromaticaCreativa.sln`, namespace `CromaticaCreativa.Modules` y proyectos separados por capa.
+- [x] Crear los 16 proyectos estructurales de Domain, Application, Infrastructure y Presentation para los cuatro Bounded Contexts.
 - [ ] Crear la base del backend ASP.NET Core.
 - [ ] Configurar MediatR y Dependency Injection.
-- [ ] Establecer físicamente las reglas de dependencia Domain/Application/Infrastructure/Presentation.
+- [x] Aislar físicamente Domain/Application/Infrastructure/Presentation mediante proyectos separados y agregar referencias solo cuando el código real las requiere.
 - [ ] Organizar Commands y Queries físicamente con una carpeta por caso de uso, mensaje, Handler y validación local solo cuando corresponda.
 - [ ] Crear únicamente los Application Ports requeridos por casos de uso reales y registrar sus adaptadores de Infrastructure en el composition root.
 - [ ] Definir la firma temporal definitiva de `IClock`, implementar el adaptador de reloj del sistema en Infrastructure y evitar acceso directo al tiempo desde el núcleo.
@@ -30,26 +31,32 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [ ] Crear la base de la aplicación React y TypeScript sin frameworks no aprobados.
 - [ ] Definir la estructura React inicial de app, Pages, Features, Components, Hooks, Services y Types sin crear carpetas vacías.
 - [ ] Establecer configuración segura y ejemplos de variables de entorno.
-- [ ] Preparar configuración segura para dirección receptora y credenciales de correo, sin fijar nombres antes de implementarlos.
+- [ ] Preparar configuración segura para el `From` técnico y credenciales de correo, sin fijar nombres antes de implementarlos.
 - [ ] Definir estrategia local para PostgreSQL y la conexión de Directus al esquema existente.
 - [ ] Incorporar checks de formato, compilación y calidad acordados.
 
 ## Fase 2 — Modelo de dominio y persistencia
 
-- [ ] Validar límites y responsabilidades de Projects, CorporateClients, Services, Contact y Location.
-- [ ] Validar qué módulos se alinean realmente con Bounded Contexts y documentar su lenguaje ubicuo.
-- [ ] Confirmar que Contact cubre información pública y envío de solicitudes sin introducir un módulo adicional innecesario.
-- [ ] Definir el contrato mínimo mediante el cual Contact valida servicios a través de `Services/public/`.
-- [ ] Decidir si las solicitudes requieren persistencia histórica; no crear `ContactRequest` mientras no exista ese requisito.
-- [ ] Mantener multimedia en Projects y reevaluar un módulo propio solo si aparece lógica suficiente.
+- [x] Implementar `Portfolio` con Aggregate Roots `Project` y `CorporateClient` y Entity interna `ProjectMedia`.
+- [x] Implementar `ProjectPeriod` con `EndDate >= StartDate` y `TotalDays` derivado.
+- [x] Implementar `ProjectServiceReference` y `ProjectCategoryReference` mediante identidad mínima sin depender de `Services.Domain`.
+- [x] Proteger la eliminación de un CorporateClient referenciado mediante FK `RESTRICT`; usar `Hidden` para retirarlo de publicación.
+- [x] Implementar `Services` con Aggregate Roots `Service` y `ServiceCategory` y estados `Active`/`Inactive`.
+- [x] Garantizar en Domain que ServiceCategory posea la identidad no vacía de exactamente un Service.
+- [x] Modelar `ReferenceImage` mediante `MediaReference` como concepto diferenciado de `ProjectMedia`.
+- [x] Implementar `CompanyProfile` con `CompanyContactInformation`, Entity `CompanyLocation` y Value Object `SocialLink`.
+- [x] Implementar `ContactRequest` como Aggregate Root de `Contact` sin asumir persistencia histórica.
+- [ ] Definir contratos mínimos en `Services/public/` para Portfolio y Contact.
+- [ ] Definir el contrato mínimo en `CompanyProfile/public/` para obtener `ContactRequestRecipientEmail`.
+- [ ] Decidir si las solicitudes requieren persistencia histórica antes de crear tabla o mapping de `ContactRequest`.
 - [ ] Mantener misión, visión, descripción institucional, eslóganes y textos estáticos en código.
-- [ ] Diseñar el modelo de dominio inicial y sus invariantes.
-- [ ] Diseñar Aggregates y límites de consistencia a partir de reglas reales, no de tablas.
-- [ ] Identificar Value Objects y Domain Services únicamente donde protejan conceptos o reglas reales.
-- [ ] Definir ownership de datos y estrategia de `DbContext`.
-- [ ] Configurar EF Core y PostgreSQL.
-- [ ] Crear y revisar las primeras migrations.
-- [ ] Configurar constraints, índices y comportamientos de eliminación apropiados.
+- [x] Implementar los Value Objects confirmados sin crear Shared Kernel por coincidencia de nombres.
+- [x] Separar Persistence de Domain mediante modelos técnicos y mappers por Bounded Context persistido.
+- [x] Definir ownership con `PortfolioDbContext`, `ServicesDbContext` y `CompanyProfileDbContext`, schemas e historiales de migrations propios; mantener Contact sin persistencia.
+- [x] Configurar EF Core 10.0.10, Npgsql 10.0.3 y dotnet-ef local 10.0.10.
+- [x] Crear las tres migrations iniciales, sus snapshots y revisar el SQL generado.
+- [x] Configurar PK, FK internas, referencias UUID opacas entre contextos, nulabilidad, UNIQUE, CHECK, índices y comportamientos de eliminación.
+- [ ] Aplicar las migrations iniciales sobre un PostgreSQL de desarrollo con credenciales configuradas y verificar el esquema real.
 - [ ] Agregar tests de Domain e integración de persistencia.
 
 ## Fase 3 — API pública
@@ -58,8 +65,11 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [ ] Definir el contrato del formulario y el catálogo final, acotado, de tipos de solicitud.
 - [ ] Implementar Queries y Handlers de lectura necesarios para el Cliente.
 - [ ] Exponer los servicios públicos necesarios para construir el selector del formulario.
-- [ ] Implementar el Command de contacto y validar el servicio seleccionado mediante el límite público de Services.
-- [ ] Definir un port de salida para correo sin acoplar Application o Domain a un proveedor.
+- [ ] Exponer las ServiceCategories Active únicamente cuando su Service padre también esté Active.
+- [ ] Implementar filtros de Portfolio por Service y ServiceCategory aplicando publicación de Projects.
+- [ ] Definir si ProjectPeriod expone fechas, duración o ningún dato temporal.
+- [ ] Implementar `SubmitContactRequestCommand`, validar el servicio mediante `Services/public/` y obtener el destinatario mediante `CompanyProfile/public/`.
+- [ ] Definir el Application Port conceptual `IEmailSender` —o el nombre final aprobado— sin acoplar Application o Domain a un proveedor.
 - [ ] Seleccionar el proveedor de correo e implementar su adaptador en Infrastructure.
 - [ ] Traducir fallos del proveedor al contrato de Application sin exponer detalles técnicos ni convertirlos en Domain Exceptions.
 - [ ] Implementar el endpoint público de contacto sin autenticación y registrar su ruta solo cuando exista.
@@ -77,6 +87,7 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [ ] Conectar Directus al PostgreSQL existente e introspeccionar las tablas creadas por EF Core Migrations.
 - [ ] Restringir a usuarios editoriales la modificación del Data Model mediante roles, policies y permissions de mínimo privilegio.
 - [ ] Implementar Filter Hooks bloqueantes para create, update y delete del dominio.
+- [ ] Cubrir Project, ProjectMedia, CorporateClient, Service, ServiceCategory, CompanyContactInformation y CompanyLocation con los Filter Hooks requeridos.
 - [ ] Implementar Commands y endpoints internos requeridos para procesar esas mutaciones.
 - [ ] Decidir y configurar autenticación/autorización Directus → ASP.NET Core.
 - [ ] Verificar rechazo de operaciones inválidas y cancelación en Directus.
@@ -96,7 +107,9 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [ ] Centralizar el cliente HTTP hacia ASP.NET Core.
 - [ ] Mantener Services/API clients independientes de Hooks y Components.
 - [ ] Implementar misión, visión y textos institucionales estáticos en código.
-- [ ] Implementar servicios, Clientes Corporativos, contacto, ubicación y listado/detalle de proyectos.
+- [ ] Implementar la página de Services con categorías activas y sus ReferenceImages.
+- [ ] Implementar Portfolio con filtros Service/ServiceCategory y listado/detalle de Projects publicados.
+- [ ] Implementar CompanyProfile con contacto público, redes sociales y ubicación configurados.
 - [ ] Implementar el formulario público con nombre, apellido, correo, empresa, teléfono, tipo de solicitud, servicio y mensaje cuando corresponda.
 - [ ] Integrar el selector con los servicios públicos de ASP.NET Core y enviar el formulario exclusivamente a esa API.
 - [ ] Agregar validación UX y feedback de envío sin confiar en ella como única defensa.
@@ -130,7 +143,7 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 - [ ] Seleccionar plataforma y topología de deployment.
 - [ ] Decidir si se utilizará Docker.
 - [ ] Configurar secretos y variables por entorno.
-- [ ] Configurar de forma segura el destinatario y las credenciales del proveedor de correo.
+- [ ] Configurar de forma segura el `From` técnico y las credenciales del proveedor; obtener el `To` desde CompanyProfile.
 - [ ] Asegurar HTTPS y aislamiento de PostgreSQL.
 - [ ] Definir backups y restauración de datos y multimedia.
 - [ ] Configurar migrations seguras durante despliegues.
@@ -139,20 +152,20 @@ Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se
 
 ## Decisiones pendientes antes de implementar
 
-- Versiones del stack y herramientas de paquetes.
-- Proyectos físicos, namespaces y composition root.
+- Versiones de React, PostgreSQL, Directus y dependencias externas distintas de EF Core/Npgsql.
+- Composition root y host ASP.NET Core.
 - Firma y tipo temporal definitivos del port de reloj, implementación concreta y lifetime de DI.
 - Controllers o Minimal APIs.
-- Estrategia de `DbContext`, schemas y migrations.
-- Modelo de dominio y relaciones iniciales de los cinco módulos conceptuales.
-- Correspondencia definitiva entre módulos y Bounded Contexts, lenguaje ubicuo y límites transaccionales.
+- Límites transaccionales de futuros casos de uso.
+- Efecto de desactivar Service/ServiceCategory sobre Projects históricos.
+- Exposición pública de fechas o duración de `ProjectPeriod`.
 - Estructura física final de React, routing, providers y herramientas frontend adicionales.
 - Storage persistente de multimedia y política de URLs externas para videos.
 - Permisos y operación de Directus.
 - Autenticación y autorización Directus → ASP.NET Core.
 - Cobertura exacta de Filter Hooks por colección y operación.
 - Contrato definitivo del formulario y catálogo final de tipos de solicitud.
-- Proveedor de correo, destinatario configurable, `From`, `Reply-To`, asunto y plantillas.
+- Proveedor de correo, configuración técnica de `From`, asunto y plantillas. `To` proviene de CompanyProfile y `Reply-To` del solicitante.
 - Política anti-spam/rate limiting, límites de tamaño, observabilidad y posible CAPTCHA.
 - Persistencia histórica o no de solicitudes de contacto.
 - Frameworks y alcance de testing.

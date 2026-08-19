@@ -1,12 +1,20 @@
 # Desarrollo
 
-Esta guía describe el flujo esperado para evolucionar el repositorio sin inventar comandos o estructura física todavía inexistentes. Debe complementarse cuando se cree la solución ejecutable.
+Esta guía describe el flujo esperado para evolucionar la solución .NET y su persistencia existente sin inventar capacidades todavía no implementadas. Debe complementarse cuando se incorporen el host ASP.NET Core y el frontend.
 
 ## Estado del entorno
 
-Actualmente no hay proyectos de backend o frontend, paquetes, base de datos configurada ni comandos de ejecución. Por tanto, esta guía define criterios y pasos conceptuales; no incluye comandos de `dotnet`, gestores npm, EF Core o Directus hasta que hayan sido creados y verificados en el repositorio.
+El backend usa .NET 10 (`net10.0`), SDK `10.0.302`, la solución `backend/CromaticaCreativa.sln` y 16 proyectos separados por capa. Los cuatro proyectos Domain contienen el modelo inicial. Los Infrastructure de `Portfolio`, `Services` y `CompanyProfile` contienen Persistence Models separados, EF Core `10.0.10`, Npgsql `10.0.3`, tres `DbContext`, configuraciones, mappers y migrations iniciales; `Contact` no tiene persistencia. Application y Presentation siguen sin lógica funcional. No existen todavía host ASP.NET Core, frontend ni Directus configurado.
 
-La terminología funcional es obligatoria: **Cliente** es el actor público sin cuenta o autenticación que consulta contenido y puede enviar el formulario de contacto mediante React; **Administrador** es el personal autorizado que se autentica exclusivamente en Directus. El módulo conceptual `CorporateClients` contiene información institucional de organizaciones clientes y no cuentas del actor Cliente.
+La restauración y compilación verificadas son:
+
+```powershell
+dotnet tool restore
+dotnet restore backend/CromaticaCreativa.sln
+dotnet build backend/CromaticaCreativa.sln --configuration Release
+```
+
+La terminología funcional es obligatoria: **Cliente** es el actor público sin cuenta o autenticación que consulta contenido y puede enviar el formulario de contacto mediante React; **Administrador** es el personal autorizado que se autentica exclusivamente en Directus. `CorporateClient` es un Aggregate Root de `Portfolio` y no una cuenta del actor Cliente.
 
 Antes de cualquier cambio:
 
@@ -41,7 +49,7 @@ Antes de cualquier cambio:
 ## Agregar una Query pública
 
 1. Definir el DTO requerido por el consumidor y los parámetros mínimos de la Query.
-2. Crear una carpeta por caso de uso dentro de `internal/application/queries/` según la estructura física vigente.
+2. Crear una carpeta por caso de uso dentro de `Queries/` del proyecto Application correspondiente.
 3. Definir una Query inmutable e implementar su Handler con MediatR.
 4. Co-localizar DTOs o validadores exclusivos solo cuando sean cohesivos; no agregar la Query o el Handler a archivos masivos compartidos.
 5. Declarar o reutilizar un read port de Application cuando sea necesario aislar persistencia.
@@ -61,7 +69,7 @@ GetProjects/
 
 Una Query no debe modificar estado observable. No se deben anticipar Queries sin un consumidor o requisito real.
 
-En la V1, ejemplos conceptuales razonables son `GetProjectsQuery`, `GetProjectBySlugQuery`, `GetServicesQuery`, `GetCorporateClientsQuery` y las consultas necesarias para contacto o ubicación. No se consideran implementados ni obligatorios hasta que exista el requisito correspondiente.
+En la V1, ejemplos conceptuales razonables son `GetProjectsQuery` dentro de `Portfolio`, `GetServicesQuery` y las consultas necesarias para Services, CompanyProfile o filtros públicos. No se consideran implementados ni obligatorios hasta que exista el requisito correspondiente.
 
 ```text
 React → ASP.NET Core → Query → Handler → Read Port ← Infrastructure / EF Core → PostgreSQL
@@ -72,7 +80,7 @@ Las consultas administrativas de Data Studio leen PostgreSQL directamente y no s
 ## Agregar un Command
 
 1. Confirmar que existe una intención de acción/cambio que pertenece a la ASP.NET Core API.
-2. Crear una carpeta por caso de uso dentro de `internal/application/commands/` y definir el Command con sus entradas mínimas; no incluir `DbContext`, adaptadores, modelos de Infrastructure ni detalles de Directus, SMTP o proveedores.
+2. Crear una carpeta por caso de uso dentro de `Commands/` del proyecto Application correspondiente y definir el Command con sus entradas mínimas; no incluir `DbContext`, adaptadores, modelos de Infrastructure ni detalles de Directus, SMTP o proveedores.
 3. Validar en Application los datos, existencia, precondiciones y coherencia propios del caso de uso.
 4. Cargar información mediante ports de Application implementados por Infrastructure; no referenciar EF Core o `DbContext` desde el Handler.
 5. Reconstruir o crear objetos de Domain mediante APIs que preserven sus invariantes.
@@ -96,13 +104,13 @@ Toda mutación administrativa debe llegar a un Command mediante un Filter Hook a
 ## Agregar un Application Port
 
 1. Confirmar que el caso de uso necesita una capacidad externa y que no es una regla del lenguaje de Domain.
-2. Declarar en `internal/application/ports/` el contrato mínimo orientado a la capacidad; no copiar la API de un proveedor ni crear un Generic Repository.
+2. Declarar en `Ports/` del proyecto Application el contrato mínimo orientado a la capacidad; no copiar la API de un proveedor ni crear un Generic Repository.
 3. Inyectar el port en el Handler que lo necesita. Application no referencia la implementación concreta.
 4. Implementar el adaptador en Infrastructure, incluyendo la traducción de fallos técnicos al contrato esperado por Application.
 5. Registrar port e implementación en el composition root mediante Dependency Injection.
 6. Probar Application con un sustituto determinista y probar el adaptador con integración proporcional al riesgo.
 
-`IClock`, `IEmailSender`, `IProjectReadStore` e `IMediaStorage` son ejemplos conceptuales; no deben crearse todos preventivamente ni se consideran contratos implementados.
+`IClock`, `IEmailSender`, `IProjectReadStore` e `IMediaStorage` son ejemplos conceptuales; no deben crearse todos preventivamente ni se consideran contratos implementados. Un contrato entre contextos pertenece a `public/` del contexto proveedor, no a un Application Port de Infrastructure.
 
 ## Incorporar la hora actual a un caso de uso
 
@@ -114,6 +122,17 @@ Toda mutación administrativa debe llegar a un Command mediante un Filter Hook a
 6. Probar el Handler con un reloj fijo o controlable, por ejemplo `FakeClock`; los tests de Domain reciben valores temporales explícitos.
 
 `IClock` pertenece por defecto a Application. Solo debe reconsiderarse una abstracción en Domain si una regla autónoma del dominio exige genuinamente esa capacidad.
+
+## Relacionar un Project con Service y ServiceCategory
+
+1. Recibir en el caso de uso de `Portfolio.Application` la referencia al Service y ServiceCategory seleccionados.
+2. Consultar un contrato mínimo expuesto por `Services/public/`; no importar `Services/internal/` ni tipos de `Services.Domain`.
+3. Verificar que Service y ServiceCategory existan, que la Category pertenezca al Service y los estados requeridos por el caso de uso.
+4. Crear `ProjectServiceReference` y `ProjectCategoryReference` propios de `Portfolio.Domain`.
+5. Invocar la API de `Project` para establecer o cambiar las referencias sin saltarse sus invariantes.
+6. Probar referencias coherentes, Service/Category inexistentes, pertenencia incorrecta y reglas de estado relevantes.
+
+Las referencias implementadas conservan únicamente un `Guid` no vacío propio de `Portfolio.Domain`; no contienen snapshots ni tipos de `Services.Domain`. `GetProjectsQuery` sigue siendo un caso de uso de `Portfolio`; no implica un módulo `Projects`.
 
 ## Agregar una mutación administrativa
 
@@ -162,24 +181,25 @@ Domain / Projection → Response DTO → HTTP
 
 ## Agregar o modificar el formulario de contacto
 
-El formulario pertenece conceptualmente a `Contact` y se implementará como un caso de uso público sin autenticación. Directus no interviene y el requisito actual no autoriza persistir cada solicitud.
+El formulario pertenece a `Contact` y se implementará como un caso de uso público sin autenticación. Directus no interviene y la condición de Aggregate Root de `ContactRequest` no autoriza persistir cada solicitud.
 
 1. Confirmar campos, obligatoriedad, longitudes, formatos, catálogo de tipos de solicitud y resultados esperados.
 2. Mantener React limitado a UX, accesibilidad, selector de servicios y envío HTTP a ASP.NET Core; no enviar correo desde el navegador.
-3. Definir un Request DTO de transporte sin reutilizarlo como Entity o modelo de Domain.
-4. Crear un Command de Application, con nombre definitivo decidido al implementar, y despacharlo mediante MediatR.
-5. Validar nuevamente los datos y la consistencia de la solicitud en Presentation/Application.
-6. Validar el identificador del servicio mediante un contrato mínimo de `Services/public/` o el mecanismo entre módulos aprobado; no acceder a `Services/internal/`, su `DbContext` o sus tablas.
-7. Aplicar en Domain únicamente reglas reales y Value Objects justificados.
-8. Invocar un port de salida para la capacidad de correo, declarado hacia el núcleo.
-9. Implementar en Infrastructure el adaptador del proveedor que se seleccione posteriormente; no acoplar Application o Domain a su SDK.
-10. Mapear éxito y errores de forma segura sin revelar stack traces, credenciales, configuración o detalles internos del proveedor.
-11. Agregar tests de Application, adaptador, contrato HTTP y frontend proporcionales al riesgo, incluida protección antiabuso cuando exista.
-12. Actualizar README, arquitectura, endpoints y roadmap con el estado real.
+3. Definir un Request DTO de transporte sin reutilizarlo como Aggregate de Domain.
+4. Crear `SubmitContactRequestCommand` cuando se implemente y despacharlo mediante MediatR.
+5. Validar nuevamente input, formatos, precondiciones y coherencia en Presentation/Application.
+6. Validar el servicio mediante un contrato mínimo de `Services/public/`; no acceder a `Services/internal/`, su `DbContext` o sus tablas.
+7. Obtener `ContactRequestRecipientEmail` mediante `CompanyProfile/public/`; no acceder a `CompanyProfile/internal/`.
+8. Crear `ContactRequest` mediante una API de Domain que proteja sus invariantes.
+9. Invocar el Application Email Port; el Aggregate no envía correo.
+10. Implementar en Infrastructure el adaptador del proveedor que se seleccione posteriormente; no acoplar Application o Domain a su SDK.
+11. Mapear éxito y errores de forma segura sin revelar stack traces, credenciales, configuración o detalles internos del proveedor.
+12. Agregar tests de Application, Domain, adaptador, contrato HTTP y frontend proporcionales al riesgo, incluida protección antiabuso cuando exista.
+13. Actualizar README, arquitectura, endpoints y roadmap con el estado real.
 
-El correo debe presentar de forma estructurada nombre, apellido, correo del Cliente, empresa, teléfono, tipo de solicitud, servicio y mensaje cuando corresponda. La dirección del Cliente permite responderle, pero no se asume que se use técnicamente como `From`. Destinatario, proveedor, credenciales, `From`, `Reply-To`, asunto y plantillas son configuración o decisiones pendientes y nunca parámetros libres del Cliente.
+El correo debe presentar de forma estructurada `PersonName`, correo del Cliente, empresa opcional, teléfono, tipo de solicitud, servicio y mensaje opcional. `From` es configuración técnica de Infrastructure/proveedor, `To` es `ContactRequestRecipientEmail` obtenido de CompanyProfile y `Reply-To` es el `EmailAddress` validado del Cliente. Proveedor, asunto y plantillas siguen pendientes; ninguno de estos valores técnicos puede ser controlado arbitrariamente por el Cliente.
 
-No crear una Entity o tabla `ContactRequest` por defecto. Si se solicita historial, primero definir identidad, ciclo de vida, finalidad, retención y ownership, y registrar la decisión correspondiente antes de agregar mapping o migration.
+No crear una tabla `ContactRequest` por defecto. Si se solicita historial, primero definir finalidad, retención y estrategia de persistencia, y registrar la decisión correspondiente antes de agregar mapping o migration.
 
 ## Crear un Value Object
 
@@ -190,7 +210,7 @@ No crear una Entity o tabla `ContactRequest` por defecto. Si se solicita histori
 5. Mantenerlo independiente de EF Core, ASP.NET Core y otros detalles técnicos.
 6. Probar igualdad, invariantes, casos válidos e inválidos.
 
-No crear un Value Object para envolver cada `string` o primitivo. Ejemplos como `ProjectSlug`, `EmailAddress` y `PhoneNumber` solo aplican si sus reglas reales lo justifican.
+No crear un Value Object para envolver cada `string` o primitivo. Respetar los Value Objects confirmados en `ARCHITECTURE.md` y no introducir slugs, timestamps u otros conceptos no aprobados.
 
 ## Crear un Aggregate
 
@@ -238,11 +258,51 @@ No se ha seleccionado una librería de validación ni una estrategia global de e
 
 ## Crear una migration
 
-Los comandos concretos se documentarán cuando existan solución, proyectos y herramientas configurados.
+Ejecutar los comandos desde la raíz del repositorio. Restaurar primero la herramienta local `dotnet-ef` `10.0.10`:
+
+```powershell
+dotnet tool restore
+```
+
+Las factories de design-time usan una sola variable para la misma base PostgreSQL. Configurarla únicamente en el entorno local; no versionar el valor ni credenciales reales:
+
+```powershell
+$env:CROMATICA_DB_CONNECTION_STRING = "Host=localhost;Database=cromatica;Username=USUARIO_LOCAL;Password=SECRETO_LOCAL"
+```
+
+Cada contexto posee sus migrations. Ejemplos de generación:
+
+```powershell
+dotnet tool run dotnet-ef -- migrations add AddPortfolioChange --project backend/modules/Portfolio/CromaticaCreativa.Modules.Portfolio.Infrastructure/CromaticaCreativa.Modules.Portfolio.Infrastructure.csproj --context CromaticaCreativa.Modules.Portfolio.Infrastructure.Persistence.Context.PortfolioDbContext --output-dir Persistence/Migrations
+
+dotnet tool run dotnet-ef -- migrations add AddServicesChange --project backend/modules/Services/CromaticaCreativa.Modules.Services.Infrastructure/CromaticaCreativa.Modules.Services.Infrastructure.csproj --context CromaticaCreativa.Modules.Services.Infrastructure.Persistence.Context.ServicesDbContext --output-dir Persistence/Migrations
+
+dotnet tool run dotnet-ef -- migrations add AddCompanyProfileChange --project backend/modules/CompanyProfile/CromaticaCreativa.Modules.CompanyProfile.Infrastructure/CromaticaCreativa.Modules.CompanyProfile.Infrastructure.csproj --context CromaticaCreativa.Modules.CompanyProfile.Infrastructure.Persistence.Context.CompanyProfileDbContext --output-dir Persistence/Migrations
+```
+
+Generar y revisar SQL sin aplicarlo:
+
+```powershell
+dotnet tool run dotnet-ef -- migrations script --project backend/modules/Portfolio/CromaticaCreativa.Modules.Portfolio.Infrastructure/CromaticaCreativa.Modules.Portfolio.Infrastructure.csproj --context CromaticaCreativa.Modules.Portfolio.Infrastructure.Persistence.Context.PortfolioDbContext
+
+dotnet tool run dotnet-ef -- migrations script --project backend/modules/Services/CromaticaCreativa.Modules.Services.Infrastructure/CromaticaCreativa.Modules.Services.Infrastructure.csproj --context CromaticaCreativa.Modules.Services.Infrastructure.Persistence.Context.ServicesDbContext
+
+dotnet tool run dotnet-ef -- migrations script --project backend/modules/CompanyProfile/CromaticaCreativa.Modules.CompanyProfile.Infrastructure/CromaticaCreativa.Modules.CompanyProfile.Infrastructure.csproj --context CromaticaCreativa.Modules.CompanyProfile.Infrastructure.Persistence.Context.CompanyProfileDbContext
+```
+
+Cuando exista PostgreSQL local configurado, aplicar cada contexto de forma explícita:
+
+```powershell
+dotnet tool run dotnet-ef -- database update --project backend/modules/Portfolio/CromaticaCreativa.Modules.Portfolio.Infrastructure/CromaticaCreativa.Modules.Portfolio.Infrastructure.csproj --context CromaticaCreativa.Modules.Portfolio.Infrastructure.Persistence.Context.PortfolioDbContext
+
+dotnet tool run dotnet-ef -- database update --project backend/modules/Services/CromaticaCreativa.Modules.Services.Infrastructure/CromaticaCreativa.Modules.Services.Infrastructure.csproj --context CromaticaCreativa.Modules.Services.Infrastructure.Persistence.Context.ServicesDbContext
+
+dotnet tool run dotnet-ef -- database update --project backend/modules/CompanyProfile/CromaticaCreativa.Modules.CompanyProfile.Infrastructure/CromaticaCreativa.Modules.CompanyProfile.Infrastructure.csproj --context CromaticaCreativa.Modules.CompanyProfile.Infrastructure.Persistence.Context.CompanyProfileDbContext
+```
 
 El flujo obligatorio será:
 
-1. Modificar el modelo y la configuración EF Core.
+1. Modificar el Persistence Model y su configuración EF Core sin adaptar ni mapear directamente clases Domain.
 2. Generar una migration con un nombre descriptivo según `CONVENTIONS.md`.
 3. Revisar íntegramente operaciones `Up` y `Down`, tipos, nulabilidad, defaults, índices y pérdida potencial de datos.
 4. Verificarla sobre una base local compatible.
@@ -254,6 +314,8 @@ El flujo obligatorio será:
 
 Directus accede a los datos, pero no diseña el esquema. No crear o eliminar tablas/columnas del dominio, cambiar tipos, eliminar constraints, cambiar Foreign Keys o modificar relaciones estructurales fuera de una EF Core Migration. No ejecutar cambios manuales no versionados.
 
+`Portfolio`, `Services` y `CompanyProfile` usan respectivamente los schemas `portfolio`, `services` y `company_profile`, cada uno con su `__ef_migrations_history`. No crear migrations globales, un `ContactDbContext`, FKs entre Bounded Contexts ni migrations desde Directus.
+
 ## Agregar un módulo
 
 1. Documentar la capacidad, lenguaje y modelo de negocio, y por qué no pertenecen a un módulo existente.
@@ -261,12 +323,12 @@ Directus accede a los datos, pero no diseña el esquema. No crear o eliminar tab
 3. Definir ownership de datos, invariantes y límites transaccionales.
 4. Identificar contratos necesarios con otros módulos y comprobar que no compartan Entities/Aggregates ni generen ciclos.
 5. Registrar una decisión arquitectónica si el cambio es significativo.
-6. Crear `public/` mínimo e `internal/` con las capas requeridas; no llenar carpetas con abstracciones vacías.
+6. Crear proyectos separados `{Context}.Domain`, `{Context}.Application`, `{Context}.Infrastructure` y `{Context}.Presentation`; agregar solo referencias permitidas y realmente necesarias. La frontera pública entre contextos se materializa únicamente si existe un consumidor real.
 7. Integrarlo en el composition root sin exponer detalles internos.
 8. Agregar tests de arquitectura o dependencias si existe soporte.
 9. Actualizar `README.md`, `ARCHITECTURE.md`, `ROADMAP.md` y diagramas.
 
-Los módulos conceptuales actuales son `Projects`, `CorporateClients`, `Services`, `Contact` y `Location`. No crear automáticamente `Identity`, `Users`, `Site`, `SiteSettings` o `Media`. La multimedia permanece inicialmente en `Projects`; misión, visión, descripción institucional, eslóganes y textos poco cambiantes permanecen en código.
+Los Bounded Contexts actuales son `Portfolio`, `Services`, `CompanyProfile` y `Contact`. No crear módulos `Projects`, `CorporateClients`, `Location`, `Categories`, `Media`, `Identity`, `Users`, `Site` o `SiteSettings` sin una nueva decisión justificada. `ProjectMedia` permanece dentro de `Project`; misión, visión, descripción institucional, eslóganes y textos poco cambiantes permanecen en código.
 
 ## Crear o modificar una feature React
 
@@ -282,6 +344,8 @@ Los módulos conceptuales actuales son `Projects`, `CorporateClients`, `Services
 
 Para contacto, la Page compone la feature, el hook de formulario es opcional y solo se justifica por comportamiento React, y el service envía a ASP.NET Core. Nunca se envía correo desde el navegador.
 
+La UI de Services obtiene Services Active y ServiceCategories Active cuyo Service padre también esté Active. La UI de Portfolio filtra Projects publicados por Service y ServiceCategory. No exponer fechas o `TotalDays` de `ProjectPeriod` hasta definir el contrato público correspondiente.
+
 ## Agregar multimedia a un proyecto
 
 1. Separar el archivo físico de la referencia del dominio.
@@ -291,11 +355,13 @@ Para contacto, la Page compone la feature, el hook de formulario es opcional y s
 5. Despachar un Command que valide o normalice la asociación con `Project` o `ProjectMedia`.
 6. Permitir que Directus persista únicamente la metadata y referencias aprobadas.
 
+`ProjectMedia` es una Entity interna controlada por `Project`. No confundirla con `ServiceCategory.ReferenceImage`, que es una imagen ilustrativa y no multimedia real de un trabajo realizado.
+
 La tecnología concreta de storage y el uso de URLs externas para videos grandes están pendientes.
 
 ## Agregar eventos
 
-- Crear un Domain Event solo para un hecho relevante del negocio, como el ejemplo conceptual `ProjectPublishedDomainEvent`.
+- Crear un Domain Event solo para un hecho relevante del negocio confirmado; el modelo inicial no aprueba ninguno por defecto.
 - Mantener Domain Events dentro del monolito y despacharlos mediante MediatR u otro mecanismo interno apropiado cuando exista una razón.
 - Crear un Integration Event solo cuando otro módulo o sistema tenga una necesidad real de consumirlo.
 - No generar eventos para cada CRUD, no confundir CQRS con Event Sourcing y no agregar Kafka, RabbitMQ, Service Bus u otro broker sin requisito.
@@ -348,7 +414,10 @@ Los tests de Domain reciben timestamps y datos explícitos; no dependen de SMTP,
 - ASP.NET Core puede leer estado con EF Core, pero no duplica la escritura final de Directus.
 - ASP.NET Core no incorpora login de Cliente, registro, Identity, roles propios o panel administrativo sin requisito aprobado.
 - El formulario no pasa por Directus, no se envía desde React y no se persiste automáticamente.
-- `Contact` consume solo el límite público aprobado de `Services`; ni Application ni Domain dependen del proveedor de correo.
+- `Contact` consume solo los límites públicos aprobados de `Services` y `CompanyProfile`; ni Application ni Domain dependen del proveedor de correo.
+- `Portfolio.Domain` usa referencias propias y no depende de `Services.Domain`; `Portfolio.Application` valida Service/Category mediante `Services/public/`.
+- `ProjectMedia` y `CompanyLocation` permanecen dentro de sus Aggregates; `ServiceCategory` y `ContactRequest` conservan su condición de Aggregate Roots.
+- `From`, `To` y `Reply-To` respetan la separación Infrastructure, CompanyProfile y solicitante.
 - React usa Pages/Features/Components/Hooks/Services según responsabilidades reales, centraliza HTTP y no replica las capas del backend.
 - Request y Response DTOs no exponen Entities de Domain.
 - Las validaciones e integridad están cubiertas en las capas apropiadas.
@@ -356,4 +425,4 @@ Los tests de Domain reciben timestamps y datos explícitos; no dependen de SMTP,
 - Las migrations y contratos están revisados si aplican.
 - Endpoints y documentación reflejan el estado real.
 
-Hasta que exista tooling ejecutable, la verificación se limita a consistencia documental y revisión de enlaces/estructura.
+Mientras no exista host ASP.NET Core, la verificación ejecutable se limita a restaurar y compilar la solución y a ejecutar los tests que se incorporen cuando se apruebe el framework correspondiente.
