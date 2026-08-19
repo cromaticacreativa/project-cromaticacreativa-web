@@ -1,175 +1,155 @@
 # Roadmap
 
-Este roadmap organiza el trabajo por fases sin asignar fechas. Una tarea solo se marca como completada después de existir y haber sido verificada en el repositorio.
+El roadmap no asigna fechas. Solo se marca completado lo que existe y fue verificado.
 
-## Fase 0 — Documentación y arquitectura
+## Estado heredado — conservado en Git
 
-- [x] Crear documentación técnica inicial.
-- [x] Registrar decisiones arquitectónicas iniciales.
-- [x] Documentar límites entre módulos y capas.
-- [x] Preparar catálogos para endpoints y decisiones futuras.
-- [x] Alinear actores Cliente y Administrador con el ERS.
-- [x] Documentar los tres flujos: consulta pública, consulta administrativa y mutación administrativa con Filter Hook.
-- [x] Documentar el requisito y flujo conceptual del formulario público de contacto.
-- [x] Documentar contenido estático, DTOs, validación, eventos y multimedia.
-- [x] Precisar DDD pragmático, Bounded Contexts, dependencias hexagonales y arquitectura modular React.
-- [x] Formalizar los Bounded Contexts iniciales `Portfolio`, `Services`, `CompanyProfile` y `Contact`.
-- [x] Resolver framework, SDK, solución, namespace raíz y organización física inicial del backend.
+- [x] Existe la solución .NET y separación física previa por capas.
+- [x] Existe Domain en Portfolio, Services, CompanyProfile y Contact.
+- [x] Existen Persistence Models, configuraciones, mappers, tres `DbContext` y EF Migrations para Portfolio, Services y CompanyProfile.
+- [x] Contact permanece sin persistencia histórica.
+- [x] Migrar el comportamiento de Domain a TypeScript y retirar .NET/EF/PostgreSQL del árbol activo.
 
-## Fase 1 — Fundación técnica
+Estos elementos explican la historia; no forman parte del árbol activo.
 
-- [x] Seleccionar .NET 10 (`net10.0`) y fijar el SDK 10.0.302.
-- [x] Definir `backend/CromaticaCreativa.sln`, namespace `CromaticaCreativa.Modules` y proyectos separados por capa.
-- [x] Crear los 16 proyectos estructurales de Domain, Application, Infrastructure y Presentation para los cuatro Bounded Contexts.
-- [ ] Crear la base del backend ASP.NET Core.
-- [ ] Configurar MediatR y Dependency Injection.
-- [x] Aislar físicamente Domain/Application/Infrastructure/Presentation mediante proyectos separados y agregar referencias solo cuando el código real las requiere.
-- [ ] Organizar Commands y Queries físicamente con una carpeta por caso de uso, mensaje, Handler y validación local solo cuando corresponda.
-- [ ] Crear únicamente los Application Ports requeridos por casos de uso reales y registrar sus adaptadores de Infrastructure en el composition root.
-- [ ] Definir la firma temporal definitiva de `IClock`, implementar el adaptador de reloj del sistema en Infrastructure y evitar acceso directo al tiempo desde el núcleo.
-- [ ] Definir la estrategia de errores/resultados y su traducción segura entre Domain, Application, Infrastructure y Presentation.
-- [ ] Crear la base de la aplicación React y TypeScript sin frameworks no aprobados.
-- [ ] Definir la estructura React inicial de app, Pages, Features, Components, Hooks, Services y Types sin crear carpetas vacías.
-- [ ] Establecer configuración segura y ejemplos de variables de entorno.
-- [ ] Preparar configuración segura para el `From` técnico y credenciales de correo, sin fijar nombres antes de implementarlos.
-- [ ] Definir estrategia local para PostgreSQL y la conexión de Directus al esquema existente.
-- [ ] Incorporar checks de formato, compilación y calidad acordados.
+## Fase 0 — Arquitectura objetivo
 
-## Fase 2 — Modelo de dominio y persistencia
+- [x] Mantener monorepo, monolito modular, DDD pragmático y arquitectura hexagonal.
+- [x] Mantener los Bounded Contexts Portfolio, Services, CompanyProfile y Contact.
+- [x] Aprobar Node.js 22, TypeScript y NestJS como backend objetivo.
+- [x] Aprobar `@nestjs/cqrs` para CommandBus/QueryBus.
+- [x] Aprobar TypeORM/MySQL y migrations como autoridad estructural.
+- [x] Aprobar React/TypeScript/Vite como frontend objetivo.
+- [x] Definir el Hostinger Business Web Hosting existente como entorno objetivo de evaluación.
+- [x] Mantener Directus provisional y definir su PoC obligatoria.
+- [x] Documentar Filter Hook bloqueante y escritor final único como diseño condicionado a la PoC.
 
-- [x] Implementar `Portfolio` con Aggregate Roots `Project` y `CorporateClient` y Entity interna `ProjectMedia`.
-- [x] Implementar `ProjectPeriod` con `EndDate >= StartDate` y `TotalDays` derivado.
-- [x] Implementar `ProjectServiceReference` y `ProjectCategoryReference` mediante identidad mínima sin depender de `Services.Domain`.
-- [x] Proteger la eliminación de un CorporateClient referenciado mediante FK `RESTRICT`; usar `Hidden` para retirarlo de publicación.
-- [x] Implementar `Services` con Aggregate Roots `Service` y `ServiceCategory` y estados `Active`/`Inactive`.
-- [x] Garantizar en Domain que ServiceCategory posea la identidad no vacía de exactamente un Service.
-- [x] Modelar `ReferenceImage` mediante `MediaReference` como concepto diferenciado de `ProjectMedia`.
-- [x] Implementar `CompanyProfile` con `CompanyContactInformation`, Entity `CompanyLocation` y Value Object `SocialLink`.
-- [x] Implementar `ContactRequest` como Aggregate Root de `Contact` sin asumir persistencia histórica.
-- [ ] Definir contratos mínimos en `Services/public/` para Portfolio y Contact.
-- [ ] Definir el contrato mínimo en `CompanyProfile/public/` para obtener `ContactRequestRecipientEmail`.
-- [ ] Decidir si las solicitudes requieren persistencia histórica antes de crear tabla o mapping de `ContactRequest`.
-- [ ] Mantener misión, visión, descripción institucional, eslóganes y textos estáticos en código.
-- [x] Implementar los Value Objects confirmados sin crear Shared Kernel por coincidencia de nombres.
-- [x] Separar Persistence de Domain mediante modelos técnicos y mappers por Bounded Context persistido.
-- [x] Definir ownership con `PortfolioDbContext`, `ServicesDbContext` y `CompanyProfileDbContext`, schemas e historiales de migrations propios; mantener Contact sin persistencia.
-- [x] Configurar EF Core 10.0.10, Npgsql 10.0.3 y dotnet-ef local 10.0.10.
-- [x] Crear las tres migrations iniciales, sus snapshots y revisar el SQL generado.
-- [x] Configurar PK, FK internas, referencias UUID opacas entre contextos, nulabilidad, UNIQUE, CHECK, índices y comportamientos de eliminación.
-- [ ] Aplicar las migrations iniciales sobre un PostgreSQL de desarrollo con credenciales configuradas y verificar el esquema real.
-- [ ] Agregar tests de Domain e integración de persistencia.
+## Fase 1 — Fundación Node.js/NestJS
 
-## Fase 3 — API pública
+- [x] Crear la aplicación Node.js 22 + TypeScript + NestJS.
+- [x] Definir estructura física bajo `src/modules/{Context}` con carpetas `{Context}.{Layer}` y Commons local.
+- [x] Configurar los cuatro módulos y Dependency Injection de NestJS.
+- [x] Incorporar `@nestjs/cqrs` sin casos de uso ficticios.
+- [x] Materializar Domain, Application, Infrastructure y Presentation con dependencias correctas.
+- [x] Materializar `Domain/Abstract`, `Application/Ports`, `Application/Validations`, `Infrastructure/Persistence`, Presentation y `{Context}.Commons/DTOs`.
+- [x] Reservar `Domain/Abstract` exclusivamente para interfaces `I*` y mover bases de Value Objects a `ValueObjects/Base`.
+- [x] Migrar Domain preservando invariantes, igualdad por valor y ownership respecto al C# histórico.
+- [x] Mantener Domain libre de `node:crypto`: `UuidValueObject` valida UUID explícitos y no genera identidades.
+- [x] Retirar `shared/domain`, `src/database` y agrupaciones de conceptos.
+- [ ] Crear contratos `public/` solo cuando exista un consumidor.
+- [x] Definir configuración y ejemplo seguro de entorno para MySQL.
+- [x] Configurar tests con `node:test`; formatter y lint continúan pendientes hasta una necesidad real.
 
-- [ ] Definir contratos REST a partir de casos de uso reales.
-- [ ] Definir el contrato del formulario y el catálogo final, acotado, de tipos de solicitud.
-- [ ] Implementar Queries y Handlers de lectura necesarios para el Cliente.
-- [ ] Exponer los servicios públicos necesarios para construir el selector del formulario.
-- [ ] Exponer las ServiceCategories Active únicamente cuando su Service padre también esté Active.
-- [ ] Implementar filtros de Portfolio por Service y ServiceCategory aplicando publicación de Projects.
-- [ ] Definir si ProjectPeriod expone fechas, duración o ningún dato temporal.
-- [ ] Implementar `SubmitContactRequestCommand`, validar el servicio mediante `Services/public/` y obtener el destinatario mediante `CompanyProfile/public/`.
-- [ ] Definir el Application Port conceptual `IEmailSender` —o el nombre final aprobado— sin acoplar Application o Domain a un proveedor.
-- [ ] Seleccionar el proveedor de correo e implementar su adaptador en Infrastructure.
-- [ ] Traducir fallos del proveedor al contrato de Application sin exponer detalles técnicos ni convertirlos en Domain Exceptions.
-- [ ] Implementar el endpoint público de contacto sin autenticación y registrar su ruta solo cuando exista.
-- [ ] Implementar endpoints mediante Presentation y MediatR.
-- [ ] Mapear Request DTOs y Response DTOs sin exponer Entities de Domain.
-- [ ] Exponer exclusivamente campos públicos.
-- [ ] Definir paginación, filtros y errores donde corresponda.
+## Fase 2 — TypeORM y MySQL
+
+- [x] Configurar conexión MySQL y TypeORM.
+- [x] Implementar un único DataSource técnico.
+- [x] Crear diez Persistence Models separados de Domain dentro de sus módulos.
+- [x] Definir diez DTOs de persistencia planos en los Commons locales y usarlos como contratos de entrada de los mappers.
+- [x] Implementar cinco mappers Domain ↔ Persistence.
+- [x] Definir tablas singulares `snake_case`, UUID `CHAR(36)` ASCII/binario y nombres explícitos de constraints.
+- [x] Configurar PK, FK internas, `NOT NULL`, `UNIQUE`, checks, índices, cardinalidades y delete behaviors.
+- [x] Evitar FKs/dependencias técnicas cruzadas entre Bounded Contexts.
+- [x] Configurar TypeORM Migrations y mantener `synchronize: false`.
+- [x] Dividir y revisar migrations iniciales por Portfolio, Services y CompanyProfile.
+- [x] Proteger físicamente la portada única de Project mediante columna generada nullable y `UNIQUE`.
+- [ ] Probar migrations sobre MySQL.
+- [x] Mantener ContactRequest sin tabla ni migration funcional.
+- [x] Modelar `Client` como Entity efímera con identidad interna y componerla dentro de `ContactRequest`.
+- [x] Sustituir el enum anterior por `TipoSolicitud` con los dos valores aprobados.
+- [x] Refactorizar CompanyProfile a colecciones públicas de phones/emails, WhatsApp como SocialLink y CompanyLocation sin identidad Domain.
+- [x] Ajustar los cinco modelos, DTOs, mapper y migration inicial de CompanyProfile al esquema relacional final.
+- [x] Verificar metadata TypeORM, SQL de migrations y mappers sin conexión.
+- [ ] Agregar integración contra una instancia MySQL real.
+
+## Fase 3 — API y CQRS
+
+- [ ] Definir primeros contratos REST reales.
+- [ ] Implementar Queries públicas y read ports con proyecciones sin N+1.
+- [ ] Implementar Commands reales con Command Handlers.
+- [ ] Generar/proporcionar IDs desde Application/composition al implementar los casos de uso que creen objetos con identidad.
+- [ ] Exponer Services Active y categorías Active con padre Active.
+- [ ] Exponer Projects publicados y filtros Service/Category.
+- [ ] Decidir exposición pública de ProjectPeriod.
+- [ ] Crear `Services/public/` y `CompanyProfile/public/` cuando Contact/Portfolio los necesiten.
+- [ ] Implementar `SubmitContactRequestCommand`.
+- [x] Materializar únicamente el tipo plano `SubmitContactRequestDto` como frontera futura de Presentation.
+- [ ] Crear `IServicesReadPort`, `ICompanyProfileReadPort`, `IEmailSenderPort` y `ContactEmailDto` junto con el caso de uso real.
+- [ ] Seleccionar proveedor de correo e implementar el port/adaptador.
+- [ ] Definir antiabuso, límites y observabilidad del formulario.
+- [ ] Mantener cero endpoints documentados hasta que exista el primero.
 - [ ] Agregar tests de Application y contratos HTTP.
-- [ ] Actualizar los catálogos de endpoints con cada implementación.
 
-## Fase 4 — Integración con Directus
+## Fase 4 — Frontend React/Vite
 
-- [ ] Definir configuración self-hosted y acceso seguro.
-- [ ] Definir en Directus el acceso y los permisos para uno o, como máximo, dos Administradores.
-- [ ] Conectar Directus al PostgreSQL existente e introspeccionar las tablas creadas por EF Core Migrations.
-- [ ] Restringir a usuarios editoriales la modificación del Data Model mediante roles, policies y permissions de mínimo privilegio.
-- [ ] Implementar Filter Hooks bloqueantes para create, update y delete del dominio.
-- [ ] Cubrir Project, ProjectMedia, CorporateClient, Service, ServiceCategory, CompanyContactInformation y CompanyLocation con los Filter Hooks requeridos.
-- [ ] Implementar Commands y endpoints internos requeridos para procesar esas mutaciones.
-- [ ] Decidir y configurar autenticación/autorización Directus → ASP.NET Core.
-- [ ] Verificar rechazo de operaciones inválidas y cancelación en Directus.
-- [ ] Verificar normalización o reemplazo del payload aprobado.
-- [ ] Evitar y probar ausencia de doble escritura entre ASP.NET Core y Directus.
-- [ ] Probar CRUD administrativo completo con persistencia final realizada por Directus.
-- [ ] Definir tratamiento y almacenamiento de imágenes y videos.
-- [ ] Procesar asociaciones multimedia mediante Filter Hooks/Commands y persistirlas con Directus.
-- [ ] Verificar el flujo editorial completo y la visibilidad de publicación.
+- [ ] Crear React + TypeScript con Vite en una tarea posterior; actualmente `frontend/` no existe.
+- [ ] Definir Pages, features, components, hooks, services y types por responsabilidades reales.
+- [ ] Centralizar el cliente HTTP hacia NestJS.
+- [ ] Implementar contenido institucional estático.
+- [ ] Implementar Services y categorías activas.
+- [ ] Implementar Portfolio y filtros públicos.
+- [ ] Implementar CompanyProfile.
+- [ ] Implementar formulario público y selector de Services.
+- [ ] Cubrir accesibilidad, responsive, carga, vacío y error.
+- [ ] Verificar que React nunca acceda a Directus o MySQL.
 
-## Fase 5 — Frontend React
+## Fase 5 — PoC de Directus en Hostinger
 
-- [ ] Definir para el Cliente la navegación, páginas y sistema visual responsive sin autenticación.
-- [ ] Implementar composición global en `app/` y Pages por rutas reales.
-- [ ] Organizar comportamiento cohesivo en Features sin duplicar componentes reutilizables.
-- [ ] Extraer Hooks solo para responsabilidades React reales.
-- [ ] Centralizar el cliente HTTP hacia ASP.NET Core.
-- [ ] Mantener Services/API clients independientes de Hooks y Components.
-- [ ] Implementar misión, visión y textos institucionales estáticos en código.
-- [ ] Implementar la página de Services con categorías activas y sus ReferenceImages.
-- [ ] Implementar Portfolio con filtros Service/ServiceCategory y listado/detalle de Projects publicados.
-- [ ] Implementar CompanyProfile con contacto público, redes sociales y ubicación configurados.
-- [ ] Implementar el formulario público con nombre, apellido, correo, empresa, teléfono, tipo de solicitud, servicio y mensaje cuando corresponda.
-- [ ] Integrar el selector con los servicios públicos de ASP.NET Core y enviar el formulario exclusivamente a esa API.
-- [ ] Agregar validación UX y feedback de envío sin confiar en ella como única defensa.
-- [ ] Integrar imágenes y videos optimizados.
-- [ ] Cubrir estados de carga, error y contenido vacío.
-- [ ] Verificar accesibilidad y experiencia responsive.
+Directus permanece provisional hasta completar todos los puntos:
 
-## Fase 6 — Testing y optimización
+- [ ] Verificar ejecución de Node.js 22 en el Hostinger Business Web Hosting existente.
+- [ ] Verificar conexión a MySQL de Hostinger.
+- [ ] Inicializar tablas internas de Directus.
+- [ ] Verificar Data Studio.
+- [ ] Introspeccionar tablas del dominio creadas externamente.
+- [ ] Ejecutar Filter Hooks bloqueantes.
+- [ ] Verificar llamada Hook → NestJS.
+- [ ] Verificar aprobación y rechazo de mutaciones.
+- [ ] Verificar canonicalización del payload.
+- [ ] Verificar persistencia posterior a aprobación.
+- [ ] Probar ausencia de doble escritura.
+- [ ] Verificar persistencia y comportamiento de uploads.
+- [ ] Verificar carga de extensions.
+- [ ] Verificar que uploads/extensions sobrevivan reinicio o redeploy.
+- [ ] Documentar evidencia, riesgos y límites observados.
+- [ ] Adoptar Directus mediante actualización de ADR-018 o, si falla, reconsiderar CMS en una nueva ADR sin asumir alternativa.
 
-- [ ] Completar la estrategia de unit, integration, API y frontend tests.
-- [ ] Probar validación de DTOs, invariantes de Domain y constraints de PostgreSQL.
-- [ ] Verificar consultas administrativas directas y mutaciones bloqueadas por Filter Hooks.
-- [ ] Probar que EF Core pueda leer estado sin persistir por segunda vez la mutación administrativa.
-- [ ] Probar campos faltantes, correo inválido, tipo de solicitud inválido y servicio inexistente en el formulario.
-- [ ] Probar envío exitoso, fallo temporal del proveedor y que no se revelen detalles internos.
-- [ ] Probar Handlers dependientes del tiempo y del correo con sustitutos deterministas como `FakeClock` y `FakeEmailSender` cuando existan esos ports.
-- [ ] Verificar que los tests de Domain no dependan de SMTP, base de datos, reloj del sistema, HTTP ni Directus.
-- [ ] Evaluar e implementar protección proporcional contra abuso, rate limiting, spam, automatización y tamaño de payload; incorporar CAPTCHA solo si se justifica.
-- [ ] Verificar un envío real a la dirección configurable de Cromática Creativa en un entorno seguro.
-- [ ] Automatizar los checks acordados.
-- [ ] Evaluar tests de arquitectura para impedir dependencias Domain → capas externas, Application → Infrastructure y accesos entre `internal/`.
-- [ ] Probar la frontera frontend para evitar requests dispersos y accesos a Directus.
-- [ ] Medir consultas y eliminar N+1 detectados.
-- [ ] Validar proyecciones, paginación y uso de `AsNoTracking()`.
-- [ ] Medir antes de incorporar caching.
-- [ ] Optimizar entrega de imágenes y multimedia.
-- [ ] Revisar seguridad, dependencias y exposición de datos.
+## Fase 6 — Integración administrativa, condicionada a PoC
 
-## Fase 7 — Deployment
+- [ ] Completar ADR-023 y definir autenticación/autorización Directus → NestJS después de la PoC.
+- [ ] Configurar mínimo privilegio para Administradores.
+- [ ] Implementar endpoints internos sin inventar doble canal de persistencia.
+- [ ] Implementar Filter Hooks por operación/colección necesaria.
+- [ ] Probar error, aprobación, payload canónico y escritor final único.
+- [ ] Confirmar que TypeORM Migrations siga siendo autoridad estructural.
+- [ ] Definir storage y operación de multimedia.
+- [ ] Probar flujo editorial completo.
 
-- [ ] Seleccionar plataforma y topología de deployment.
-- [ ] Decidir si se utilizará Docker.
+## Fase 7 — Calidad y deployment
+
+- [x] Probar invariantes de Domain, igualdad, mappers, metadata y arquitectura física de la fundación.
+- [ ] Completar tests de integración MySQL, Application, API y frontend cuando existan esas capacidades.
+- [ ] Probar DTOs y constraints contra MySQL real.
+- [ ] Verificar rendimiento y eliminar N+1.
 - [ ] Configurar secretos y variables por entorno.
-- [ ] Configurar de forma segura el `From` técnico y las credenciales del proveedor; obtener el `To` desde CompanyProfile.
-- [ ] Asegurar HTTPS y aislamiento de PostgreSQL.
-- [ ] Definir backups y restauración de datos y multimedia.
-- [ ] Configurar migrations seguras durante despliegues.
-- [ ] Incorporar observabilidad y health checks según necesidad.
-- [ ] Documentar operación, rollback y recuperación.
+- [ ] Definir backups y restauración de datos/uploads.
+- [ ] Configurar HTTPS, health checks y observabilidad según necesidad.
+- [ ] Documentar migraciones, operación, rollback y recuperación.
+- [ ] Validar deployment de NestJS y React en el Hostinger Business Web Hosting existente.
 
-## Decisiones pendientes antes de implementar
+## Decisiones pendientes
 
-- Versiones de React, PostgreSQL, Directus y dependencias externas distintas de EF Core/Npgsql.
-- Composition root y host ASP.NET Core.
-- Firma y tipo temporal definitivos del port de reloj, implementación concreta y lifetime de DI.
-- Controllers o Minimal APIs.
-- Límites transaccionales de futuros casos de uso.
-- Efecto de desactivar Service/ServiceCategory sobre Projects históricos.
-- Exposición pública de fechas o duración de `ProjectPeriod`.
-- Estructura física final de React, routing, providers y herramientas frontend adicionales.
-- Storage persistente de multimedia y política de URLs externas para videos.
-- Permisos y operación de Directus.
-- Autenticación y autorización Directus → ASP.NET Core.
-- Cobertura exacta de Filter Hooks por colección y operación.
-- Contrato definitivo del formulario y catálogo final de tipos de solicitud.
-- Proveedor de correo, configuración técnica de `From`, asunto y plantillas. `To` proviene de CompanyProfile y `Reply-To` del solicitante.
-- Política anti-spam/rate limiting, límites de tamaño, observabilidad y posible CAPTCHA.
-- Persistencia histórica o no de solicitudes de contacto.
-- Frameworks y alcance de testing.
-- Estrategia global de errores/resultados y catálogo de mapping HTTP.
-- Desarrollo local y deployment, incluido el posible uso de Docker.
+- Resultado y decisión final de la PoC de Directus.
+- Estructura física del frontend futuro.
+- Versiones distintas de Node.js 22.
+- Autenticación Directus → NestJS según ADR-023 y permisos del CMS.
+- Rutas, versionado, DTOs y estrategia de errores HTTP.
+- Límites transaccionales y concurrencia.
+- Efecto de desactivar Service/Category sobre Projects históricos.
+- Exposición de ProjectPeriod.
+- Storage de multimedia y videos externos.
+- Proveedor/configuración de correo y política antiabuso.
+- Persistencia histórica de ContactRequest.
+- Formatter, lint, testing futuro de Application/API/frontend, observabilidad, caching y operación.
 
-El login o autenticación propia para personas, las cuentas de Cliente, los roles propios de ASP.NET Core y un panel administrativo en React no son decisiones pendientes: están fuera del alcance de la V1. La autenticación técnica Directus → ASP.NET Core sí permanece pendiente.
+No son decisiones pendientes: cuentas de Cliente, autenticación propia, roles propios del backend y panel administrativo React están fuera de la V1.

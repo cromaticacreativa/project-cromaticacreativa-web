@@ -1,7 +1,3 @@
-# .NET build artifacts
-**/bin/
-**/obj/
-
 # Local environment / secrets
 .env
 .env.*
@@ -37,12 +33,9 @@ TestResults/
 coverage/
 coverage.*
 
-# NuGet local artifacts
-*.nupkg
-*.snupkg
-
-# Future frontend local/generated files
+# Node.js / TypeScript generated files
 **/node_modules/
 **/dist/
 **/.vite/
 **/.cache/
+*.tsbuildinfo

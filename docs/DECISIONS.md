@@ -18,7 +18,7 @@ El alcance actual no justifica microservicios y se desea mantener módulos aisla
 
 ### Decisión
 
-Construir un único backend desplegable como monolito modular dentro del monorepo. Todos los módulos pertenecerán a la misma aplicación y deployment, utilizarán PostgreSQL y protegerán sus límites mediante APIs públicas explícitas entre módulos. Los módulos son candidatos a alinearse con Bounded Contexts, cuya correspondencia se define por lenguaje y modelo de negocio, no por tablas o carpetas. No se introducirán microservicios.
+Construir un único backend desplegable como monolito modular dentro del monorepo. Todos los módulos pertenecerán a la misma aplicación y deployment y protegerán sus límites mediante APIs públicas explícitas entre módulos. Los módulos se alinean con Bounded Contexts por lenguaje y modelo de negocio, no por tablas o carpetas. No se introducirán microservicios.
 
 > La identificación provisional de Bounded Contexts fue resuelta posteriormente por ADR-011. La decisión de monolito modular continúa vigente.
 
@@ -36,7 +36,7 @@ Construir un único backend desplegable como monolito modular dentro del monorep
 
 ### Contexto
 
-El dominio y los casos de uso deben mantenerse independientes de ASP.NET Core, PostgreSQL, Directus y otros detalles técnicos. También se necesita que los adaptadores puedan evolucionar sin trasladar lógica de negocio a infraestructura o HTTP.
+El dominio y los casos de uso deben mantenerse independientes de NestJS, TypeORM, MySQL, Directus y otros detalles técnicos. También se necesita que los adaptadores puedan evolucionar sin trasladar lógica de negocio a infraestructura o HTTP.
 
 ### Decisión
 
@@ -47,14 +47,14 @@ Aplicar arquitectura hexagonal dentro de cada módulo. Domain es la capa más in
 - Domain permanece libre de dependencias técnicas.
 - Application sí utiliza Entities, Aggregates, Value Objects o Domain Services cuando el caso de uso lo requiere, pero no reimplementa sus invariantes.
 - Presentation se limita a la traducción HTTP y delega casos de uso.
-- Infrastructure concentra EF Core y otros adaptadores.
+- Infrastructure concentra TypeORM y otros adaptadores.
 - Las abstracciones genuinas de reglas de Domain pueden residir en Domain; los ports para recursos externos de casos de uso residen normalmente en Application.
 - Las implementaciones técnicas se suministran mediante Dependency Injection, no se construyen desde Application.
 - Requiere disciplina para no introducir abstracciones vacías ni saltarse capas.
 
 ## ADR-003 — CQRS + MediatR
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-015
 
 ### Contexto
 
@@ -76,7 +76,7 @@ Usar Commands para intenciones de cambio o acciones con efectos, Queries para le
 
 ## ADR-004 — Entity Framework Core + PostgreSQL
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-016
 
 ### Contexto
 
@@ -97,7 +97,7 @@ Usar PostgreSQL para los datos del dominio y Entity Framework Core como ORM y au
 
 ## ADR-005 — Directus como backoffice consumidor de ASP.NET Core
 
-**Estado:** Reemplazada por ADR-009 y ADR-010
+**Estado:** Reemplazada por ADR-018 y ADR-019
 
 > Registro histórico no vigente. Se conserva para explicar la evolución de la integración.
 
@@ -128,15 +128,15 @@ El Cliente requiere una interfaz pública responsive y sin autenticación, indep
 
 ### Decisión
 
-Construir el frontend público con React y TypeScript, HTML5 y CSS3. El Cliente lo utiliza sin cuenta ni login. Se centralizará la comunicación HTTP mediante Fetch API o un cliente posteriormente aprobado, consumiendo exclusivamente ASP.NET Core.
+Construir el frontend público con React y TypeScript, HTML5 y CSS3, usando Vite como herramienta de construcción. El Cliente lo utiliza sin cuenta ni login. Se centralizará la comunicación HTTP mediante Fetch API o un cliente posteriormente aprobado, consumiendo exclusivamente la API REST NestJS.
 
 El frontend se organizará conceptualmente con composición de aplicación, Pages, Features, Components, Hooks, Services/API clients, Types, Utils y Assets según existan responsabilidades reales. No replicará artificialmente las capas hexagonales del backend.
 
 ### Consecuencias
 
 - Frontend y backend evolucionan como aplicaciones separadas dentro del monorepo.
-- La UI depende de contratos HTTP, no del modelo interno de .NET ni de Directus.
-- Pages y Components componen UI; Features/Hooks encapsulan comportamiento React; Services centralizan ASP.NET Core. Los services no dependen de hooks.
+- La UI depende de contratos HTTP, no del modelo interno del backend ni de Directus.
+- Pages y Components componen UI; Features/Hooks encapsulan comportamiento React; Services centralizan NestJS. Los services no dependen de hooks.
 - React no envía correo directamente ni conoce credenciales, destinatarios internos o detalles del proveedor.
 - Cualquier framework adicional requiere aprobación y justificación.
 - La estructura definitiva, versiones y herramientas de frontend quedan pendientes.
@@ -151,7 +151,7 @@ Misión, visión, descripción institucional general, eslóganes y textos corpor
 
 ### Decisión
 
-Mantener ese contenido en código. No crear una entidad `SiteSettings`, un módulo `Site` o tablas equivalentes únicamente para hacerlo administrable. Directus gestionará proyectos, multimedia de proyectos, Clientes Corporativos, servicios, información de contacto, redes sociales y ubicación conforme a ADR-009 y ADR-010.
+Mantener ese contenido en código. No crear una entidad `SiteSettings`, un módulo `Site` o tablas equivalentes únicamente para hacerlo administrable. Si Directus supera la PoC de ADR-018, podrá gestionar proyectos, multimedia, Clientes Corporativos, servicios e información de CompanyProfile conforme a ADR-019.
 
 ### Consecuencias
 
@@ -161,7 +161,9 @@ Mantener ese contenido en código. No crear una entidad `SiteSettings`, un módu
 
 ## ADR-008 — Autenticación Directus → ASP.NET Core
 
-**Estado:** Pendiente
+**Estado:** Reemplazada por ADR-023
+
+> Registro histórico de la etapa ASP.NET Core. ADR-023 conserva como pendiente la decisión equivalente para la arquitectura NestJS vigente; ADR-018 solo condiciona la adopción de Directus a una PoC y no resuelve su autenticación técnica.
 
 ### Contexto
 
@@ -179,7 +181,7 @@ El mecanismo técnico todavía no está decidido. No se adopta como definitiva n
 
 ## ADR-009 — Directus conectado al esquema de dominio administrado por EF Core
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-016 y ADR-018
 
 ### Contexto
 
@@ -199,7 +201,7 @@ Directus se conectará directamente a PostgreSQL e introspeccionará el esquema 
 
 ## ADR-010 — Filter Hooks bloqueantes para mutaciones administrativas
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-019
 
 ### Contexto
 
@@ -236,6 +238,8 @@ Definir cuatro Bounded Contexts iniciales:
 - `CompanyProfile`: contiene el Aggregate Root `CompanyContactInformation`; `CompanyLocation` es una Entity interna y `SocialLink` un Value Object.
 - `Contact`: contiene el Aggregate Root `ContactRequest` y se dedica al procesamiento del formulario.
 
+> La clasificación de `CompanyLocation` como Entity fue reemplazada posteriormente por ADR-022. El ownership de CompanyProfile y la definición de los Bounded Contexts establecidos en esta ADR continúan vigentes.
+
 No crear módulos independientes `Projects`, `CorporateClients`, `Location`, `Categories` o `Media`. Las relaciones entre contextos atraviesan contratos mínimos de `public/`: `Portfolio.Application` consulta `Services/public/`; `Contact.Application` consulta `Services/public/` y `CompanyProfile/public/`. Ningún Domain depende del Domain interno de otro contexto.
 
 ### Consecuencias
@@ -246,11 +250,11 @@ No crear módulos independientes `Projects`, `CorporateClients`, `Location`, `Ca
 - `Contact` deja de administrar información corporativa y se concentra en crear y procesar `ContactRequest`.
 - `ContactRequest` puede ser Aggregate Root sin que exista persistencia histórica o tabla en V1.
 - Los conceptos con nombres similares en contextos distintos conservan representaciones propias; esta decisión no introduce Shared Kernel.
-- Los cuatro contextos conservan arquitectura hexagonal, CQRS, MediatR y las reglas del monolito modular.
+- Los cuatro contextos conservan arquitectura hexagonal, CQRS mediante la tecnología vigente y las reglas del monolito modular.
 
 ## ADR-012 — Fundación .NET y proyectos separados por capa
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-014
 
 ### Contexto
 
@@ -282,7 +286,7 @@ No se crea todavía un proyecto `Contracts` o `Public`: la frontera pública ent
 
 ## ADR-013 — Modelo de persistencia separado y topología por Bounded Context
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-016
 
 ### Contexto
 
@@ -318,6 +322,238 @@ Solo existen FKs dentro del mismo Bounded Context. `portfolio.project.service_id
 - Directus deberá recibir acceso a los tres schemas durante su integración, sin permisos para alterar el Data Model.
 - Las migrations iniciales existen y sus scripts SQL pueden generarse sin una base activa; aplicarlas requiere una conexión PostgreSQL configurada mediante `CROMATICA_DB_CONNECTION_STRING`.
 
+## ADR-014 — Node.js 22, TypeScript y NestJS sustituyen la fundación objetivo .NET
+
+**Estado:** Aceptada
+
+> La migración física, entonces pendiente, fue autorizada y completada posteriormente. ADR-020 registra la estructura resultante.
+
+### Contexto
+
+La fundación física existente usa .NET, pero la arquitectura objetivo del producto se redefine para ajustarse al stack y al entorno de despliegue aprobados. El cambio documental no autoriza eliminar ni migrar el código heredado.
+
+### Decisión
+
+Usar Node.js 22, TypeScript y NestJS para la API REST del monolito modular. NestJS proporcionará el host, módulos, controllers y Dependency Injection. La migración desde `backend/CromaticaCreativa.sln` será una tarea posterior explícita.
+
+### Consecuencias
+
+- .NET, C#, ASP.NET Core y los `.csproj` dejan de ser la arquitectura objetivo.
+- El código .NET existente permanece como estado físico heredado hasta una migración autorizada.
+- No se fijan versiones de NestJS o TypeScript antes de implementar y verificar dependencias reales.
+- Controllers traducen HTTP y delegan; no contienen reglas de negocio.
+
+## ADR-015 — `@nestjs/cqrs` sustituye MediatR
+
+**Estado:** Aceptada
+
+### Contexto
+
+La separación entre acciones y lecturas continúa siendo útil, pero el dispatcher debe pertenecer al stack NestJS objetivo.
+
+### Decisión
+
+Usar `@nestjs/cqrs`, `CommandBus`, `QueryBus`, `CommandHandler` y `QueryHandler`. Los Commands expresan acciones o efectos y las Queries son lecturas sin efectos. Solo se crearán casos de uso reales.
+
+### Consecuencias
+
+- MediatR deja de ser parte del objetivo.
+- Presentation despacha a Application mediante los buses de NestJS.
+- El formulario se modela conceptualmente como `SubmitContactRequestCommand`.
+- CQRS no implica Event Sourcing y no autoriza CRUD ceremonial.
+
+## ADR-016 — TypeORM y MySQL sustituyen EF Core y PostgreSQL
+
+**Estado:** Aceptada
+
+> La topología que esta ADR dejó abierta fue resuelta por ADR-020.
+
+### Contexto
+
+El backend objetivo necesita persistencia relacional compatible con el entorno seleccionado, manteniendo Domain independiente del ORM y conservando evolución estructural versionada.
+
+### Decisión
+
+Usar MySQL como base relacional y TypeORM en Infrastructure. El Persistence Model será distinto del Domain Model; las entidades TypeORM no serán Aggregate Roots, Entities o Value Objects de Domain. TypeORM Migrations será la autoridad estructural y `synchronize: true` estará prohibido en producción.
+
+No se decide todavía la topología de `DataSource`, la existencia de múltiples DataSources, schemas MySQL, nombres de variables de entorno, convención física completa ni FKs entre Bounded Contexts.
+
+### Consecuencias
+
+- EF Core, Npgsql, PostgreSQL, los tres `DbContext` y sus schemas/migrations quedan como estado histórico y físico heredado.
+- Los mappings Domain ↔ Persistence viven en Infrastructure.
+- Cada cambio persistente requiere una migration revisada con constraints, índices, cardinalidades y delete behaviors apropiados.
+- Directus, si se adopta, se adapta a tablas creadas externamente y no controla el Data Model del dominio.
+- `ContactRequest` continúa sin persistencia histórica aprobada.
+
+## ADR-017 — Deployment objetivo en Hostinger Business Web Hosting
+
+**Estado:** Aceptada
+
+### Contexto
+
+Cromática Creativa dispone de un plan de hosting que debe evaluarse antes de introducir otra plataforma operativa.
+
+### Decisión
+
+El deployment objetivo se evaluará sobre el **Hostinger Business Web Hosting existente**. Esta decisión no introduce un VPS ni afirma límites comerciales o capacidades no verificadas.
+
+### Consecuencias
+
+- Node.js 22, NestJS, MySQL y la operación del proceso deben validarse en el entorno real.
+- No se documentan límites comerciales inestables como garantías arquitectónicas.
+- Una plataforma alternativa requeriría evidencia y una ADR futura.
+
+## ADR-018 — Directus provisional sujeto a PoC
+
+**Estado:** Pendiente
+
+### Contexto
+
+Directus podría evitar construir un panel administrativo, pero su ejecución, persistencia, extensions, uploads y comportamiento operativo en el hosting existente no han sido validados.
+
+### Decisión
+
+Mantener Directus como candidato provisional. Antes de adoptarlo, ejecutar la PoC definida en `ARCHITECTURE.md` y `ROADMAP.md` sobre el Hostinger Business Web Hosting existente. No afirmar deployment funcional ni soporte oficial. Si la PoC falla, reconsiderar el CMS mediante una ADR futura sin seleccionar ahora una alternativa.
+
+### Consecuencias
+
+- Directus no se considera implementado ni aprobado definitivamente.
+- Deben verificarse Node.js 22, MySQL, tablas internas, Data Studio, introspección, hooks, NestJS, aprobación/rechazo, payload canónico, escritura única, uploads, extensions y supervivencia tras redeploy.
+- Autenticación Directus → NestJS permanece pendiente en ADR-023; permisos y operación también continúan abiertos.
+- React nunca consumirá Directus directamente.
+
+## ADR-019 — Filter Hook bloqueante y escritor final único
+
+**Estado:** Aceptada
+
+### Contexto
+
+Las mutaciones administrativas deben atravesar Application y Domain sin que NestJS y el CMS persistan dos veces la misma operación.
+
+### Decisión
+
+Si Directus supera la PoC, cada mutación administrativa se interceptará antes de persistir mediante un Filter Hook bloqueante. El Hook llamará a un endpoint interno NestJS, que despachará un Command con `CommandBus`. Application podrá leer estado mediante un port TypeORM, invocará Domain y devolverá error, aprobación o payload canónico. Directus realizará el único `INSERT`, `UPDATE` o `DELETE` final.
+
+### Consecuencias
+
+- El Command administrativo no ejecuta la persistencia final de esa misma mutación.
+- Deben probarse bloqueo, rechazo, aprobación, canonicalización y ausencia de doble escritura.
+- Las lecturas administrativas ordinarias no requieren NestJS.
+- Si ADR-018 no se valida, este mecanismo deberá revisarse junto con la futura decisión de CMS.
+
+## ADR-020 — Estructura hexagonal física y ownership modular de persistencia
+
+**Estado:** Reemplazada por ADR-021
+
+### Contexto
+
+La primera migración física a TypeScript agrupó conceptos de Domain, introdujo un `shared/domain`, concentró configuración y migrations en `src/database` y materializó un frontend antes de la fase prevista. Aunque el comportamiento principal y el esquema MySQL eran reutilizables, esa disposición debilitaba los límites de Bounded Context, confundía infraestructura técnica global con ownership persistente y no expresaba las cuatro capas aprobadas.
+
+### Decisión
+
+Cada Bounded Context vivía directamente bajo el directorio fuente y materializaba `Domain`, `Application`, `Infrastructure` y `Presentation`. Domain separaba abstracciones, Aggregates, Entities, ValueObjects, Enums y Exceptions; Application separaba Ports, Validations, Commands y Queries; Infrastructure separaba Persistence y Adapters; Presentation separaba Controllers y Mappers. Las carpetas sin consumidor real se conservaban solo mediante `.gitkeep`, sin artefactos funcionales ficticios.
+
+No existe Shared Kernel, `shared/domain` ni una capa global `src/database`. Cada contexto mantiene sus propios Value Objects y puede usar abstracciones locales de Domain para igualdad o UUID cuando exista duplicación interna real. `Commons/DTOs` queda limitado a DTOs compartidos por varios módulos y permanece vacío hasta que exista un contrato real.
+
+Los Persistence Models, Mappers, Configurations y Migrations pertenecen al módulo propietario:
+
+- Portfolio controla `corporate_client`, `project` y `media`;
+- Services controla `service` y `category`;
+- CompanyProfile controla `company_profile`, `phone`, `email`, `location` y `social_link`;
+- Contact no controla tabla ni migration funcional para `ContactRequest`.
+
+La aplicación usa una única base MySQL y un único DataSource técnico en `backend/src/Infrastructure/Persistence/TypeOrmDataSource.ts`. La configuración global ensambla los modelos y migrations publicados por la Infrastructure de cada módulo, pero no adquiere su ownership. Los módulos registran únicamente sus propios modelos con `TypeOrmModule.forFeature(...)`.
+
+Los archivos principales del backend usan PascalCase y un concepto principal por archivo. Los mensajes propios de Domain y Application se escriben en español. El frontend React + TypeScript + Vite permanece aprobado como objetivo, pero su materialización se pospone a una tarea posterior; no existe `frontend/` en el estado versionable resultante.
+
+### Consecuencias
+
+- Los cuatro límites hexagonales son visibles y auditables en el árbol.
+- La antigua carpeta de abstracciones Domain no se convierte en depósito de ports técnicos; `Application/Ports` define necesidades externas y Infrastructure las implementa.
+- Separar migrations por ownership no crea múltiples conexiones ni múltiples DataSources.
+- No se crean Commands, Queries, Handlers, ports, validaciones Application, controllers o DTOs sin consumidor real.
+- La portada única de Project continúa protegida dentro de Portfolio mediante columna generada nullable e índice único.
+- React/Vite, sus dependencias y su estructura se incorporarán en una fase posterior con `app`, `pages`, `features`, `components`, `hooks`, `services`, `types`, `utils` y `assets` según responsabilidades reales.
+
+## ADR-021 — Módulos con capas nominales, Commons locales y composición de Contact
+
+**Estado:** Aceptada
+
+### Contexto
+
+La estructura directa por contexto y capa no hacía explícito el nombre del contexto en cada frontera física y mantenía un Commons global sin consumidor. Además, las clases base de Value Objects estaban bajo la antigua carpeta de abstracciones Domain, aunque esa carpeta debía expresar contratos, y `ContactRequest` repetía directamente los datos personales sin una Entity que representara al remitente de la solicitud.
+
+### Decisión
+
+Cada Bounded Context vive en `backend/src/modules/{Context}` y contiene `{Context}.Domain`, `{Context}.Application`, `{Context}.Infrastructure`, `{Context}.Presentation`, `{Context}.Commons` y `{Context}Module.ts`. `Commons` es local al módulo y no es una quinta capa hexagonal. No existe un Commons global.
+
+`{Context}.Domain/Abstract` contiene exclusivamente interfaces reales con prefijo `I`. Las clases base locales `ScalarValueObject` y `UuidValueObject` viven en `Domain/ValueObjects/Base`. `ICreateProjectParameters` e `ICreateContactRequestParameters` son los únicos contratos Domain materializados en esa carpeta; los contextos sin contrato real conservan solo `.gitkeep`.
+
+Los DTOs de persistencia son tipos planos, sin decoradores ni comportamiento, en `{Context}.Commons/DTOs`. Los diez Persistence Models TypeORM pueden implementar esos contratos y los mappers los aceptan como entrada. Domain no depende de Commons.
+
+En Contact, `Client` es una Entity interna y efímera compuesta por `ClientId` generado en Domain, `PersonName`, empresa opcional normalizada, `EmailAddress` y `PhoneNumber`. No es una cuenta, el actor público como identidad persistida ni un `CorporateClient`; no se almacena en MySQL. `ContactRequest` compone `Client`, `TipoSolicitud`, una propiedad `requestedService` de tipo `RequestedServiceReference` y mensaje opcional normalizado. `TipoSolicitud` admite únicamente `SOLICITUD_INFORMACION` y `SOLICITUD_SERVICIO`.
+
+> La generación de `ClientId` dentro de Domain dejó de ser vigente en una corrección posterior de la fundación: el ID continúa siendo efímero y no persistido, pero Application/composition debe proporcionar su UUID al construir `Client`. El ownership y la composición definidos por esta ADR permanecen vigentes.
+
+`Contact.Presentation/DTOs/SubmitContactRequestDto.ts` existe como tipo plano sin decoradores. El flujo objetivo será React → DTO → Presentation → `SubmitContactRequestCommand` → `CommandBus` → Contact.Application → `IServicesReadPort`/`ICompanyProfileReadPort`/`IEmailSenderPort` → `Client` + `ContactRequest` → `ContactEmailDto` → adapter SMTP. En el estado actual no se materializan Command, Handler, ports, `ContactEmailDto`, adapter, controller o endpoint porque todavía no existe el caso de uso consumidor.
+
+### Consecuencias
+
+- Las cuatro fronteras hexagonales y sus contratos locales son auditables por ruta y nombre.
+- `Abstract` no mezcla clases base con interfaces; todas las interfaces Domain/Application usan prefijo `I`.
+- Los DTOs de persistencia desacoplan mapper y clase TypeORM sin filtrarse a Domain.
+- Portfolio, Services y CompanyProfile conservan exactamente diez modelos, cinco mappers, tres migrations y un único DataSource.
+- Contact continúa sin Persistence Models, tabla, migration, adapter de correo o puertos artificiales.
+- El frontend y los endpoints permanecen sin implementar.
+
+## ADR-022 — Colecciones públicas y ubicación sin identidad en CompanyProfile
+
+**Estado:** Aceptada
+
+### Contexto
+
+CompanyProfile modelaba un único teléfono, un teléfono especial de WhatsApp y un único correo público. También otorgaba identidad Domain propia a CompanyLocation. Ese modelo no representaba la necesidad de publicar múltiples teléfonos y correos, duplicaba WhatsApp fuera de los enlaces sociales y añadía una identidad sin significado de negocio a la ubicación.
+
+### Decisión
+
+`CompanyContactInformation` administra colecciones sin duplicados de `PhoneNumber`, `EmailAddress` públicos y `SocialLink`. `ContactRequestRecipientEmail` permanece como un único correo operativo separado de la colección pública. WhatsApp es un `SocialLink` cuya red puede ser `WhatsApp`; no es un tipo de teléfono. Cada network social es única dentro del Aggregate mediante comparación normalizada.
+
+`CompanyLocation` es un Value Object compuesto por `Address` y `GeoCoordinates` obligatorias. El Aggregate puede no tener ubicación, reemplazarla completa o eliminarla, pero no existe identidad Domain para Location.
+
+En MySQL, `company_profile` contiene `contact_request_recipient_email`. Las tablas `phone` y `email` contienen filas públicas con UUID técnico, `display_order` y unicidad por valor dentro de la raíz. `social_link` mantiene UUID técnico, orden y network única. `location` usa `company_profile_id` como PK/FK y exige address, latitude y longitude. Como la migration inicial no se ha aplicado a una instancia MySQL real, se corrige directamente sin crear una migration compensatoria.
+
+`CompanyProfile.Commons/DTOs` contiene los contratos planos de persistencia. `CompanyProfile.Presentation` conserva solo Controllers y Mappers; no se inventan DTOs de transporte, controllers o endpoints sin consumidor.
+
+### Consecuencias
+
+- Domain no contiene Phone, Email o SocialLink Entities ni IDs técnicos de fila.
+- El destinatario interno nunca se publica automáticamente como email público.
+- WhatsApp comparte las reglas de unicidad y persistencia de los demás SocialLinks.
+- Los mappers preservan IDs técnicos de phone, email y social_link cuando permanece el mismo valor lógico.
+- CompanyProfile conserva cinco Persistence Models y una única ubicación física por raíz.
+
+## ADR-023 — Autenticación técnica Directus → NestJS
+
+**Estado:** Pendiente
+
+### Contexto
+
+Si Directus supera la PoC de ADR-018, sus Filter Hooks bloqueantes deberán llamar endpoints internos NestJS para procesar mutaciones administrativas conforme a ADR-019. Esa comunicación técnica necesitará autenticación y autorización antes de producción.
+
+### Decisión
+
+Todavía no se selecciona un mecanismo. Esta ADR no adopta API key, JWT, OAuth, mTLS, Basic Auth, sesiones ni proveedor alguno.
+
+La decisión se completará únicamente después de superar la PoC de Directus, conocer las restricciones reales del Hostinger Business Web Hosting existente y definir amenazas y requisitos operativos verificables.
+
+### Consecuencias
+
+- Ningún endpoint administrativo interno se considera listo para producción mientras esta ADR permanezca pendiente.
+- No se hardcodearán secretos en código, configuración versionada, hooks ni contratos.
+- El mecanismo futuro deberá admitir rotación de credenciales y mínimo privilegio.
+- Si Directus no se adopta, esta ADR deja de ser necesaria junto con esa integración.
+
 ## Decisiones abiertas del formulario público de contacto
 
 El formulario no introduce por sí solo una ADR adicional. El uso de un port declarado por Application y un adaptador implementado por Infrastructure aplica la arquitectura hexagonal aceptada en ADR-002; no selecciona una tecnología de correo.
@@ -327,7 +563,7 @@ Permanecen pendientes y no deben tratarse como decisiones cerradas:
 - Proveedor o servidor de correo.
 - Configuración técnica y dirección concreta de `From`.
 - Asunto, HTML y texto plano.
-- Contrato definitivo, obligatoriedad de campos y catálogo final de tipos de solicitud.
+- Contrato HTTP definitivo y obligatoriedad de campos. El catálogo Domain de `TipoSolicitud` ya está cerrado con dos valores.
 - Política anti-spam, rate limiting, límites de tamaño, automatización abusiva, observabilidad y posible CAPTCHA si resulta necesario.
 - Persistencia histórica o no de las solicitudes. `ContactRequest` es Aggregate Root, pero el requisito actual no aprueba una tabla ni almacenamiento histórico.
 

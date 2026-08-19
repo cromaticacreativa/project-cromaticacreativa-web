@@ -1,41 +1,35 @@
 # Catálogo de endpoints
 
-Este documento registra exclusivamente endpoints implementados y verificados de la API ASP.NET Core. React deberá consumir esta API; nunca la API de Directus.
+Este documento registra exclusivamente endpoints implementados y verificados de la API REST NestJS. El futuro frontend React consumirá únicamente esta API; nunca Directus o MySQL.
 
-En la V1, el **Cliente** consume sin cuenta ni autenticación endpoints públicos de lectura de `Portfolio`, `Services` y `CompanyProfile` y, cuando se implemente, el caso de uso de `Contact` para enviar el formulario. Este último produce un correo, pero no permite modificar contenido administrado ni implica persistir históricamente `ContactRequest`. El **Administrador** gestiona contenido en Directus Data Studio. Las consultas administrativas leen PostgreSQL directamente; los Filter Hooks llaman endpoints internos de ASP.NET Core antes de cada mutación. No existen login de Cliente, registro, Identity, roles o permisos administrativos propios del backend.
-
-Los endpoints serán añadidos a esta sección a medida que sean implementados. Actualmente no existe una API funcional ni rutas definidas.
+La fundación NestJS compila y sus cuatro módulos materializan Presentation, pero no contienen controllers ni rutas definidas. `Contact.Presentation/DTOs/SubmitContactRequestDto.ts` es solo un tipo plano de frontera preparado; no registra una ruta. El número de endpoints implementados es **cero**.
 
 | Método | Endpoint | Módulo | Request | Response | Estado |
-| ------ | -------- | ------ | ------- | -------- | ------ |
-| — | — | — | — | — | Pendiente: no hay endpoints implementados. |
+| --- | --- | --- | --- | --- | --- |
+| — | — | — | — | — | No hay endpoints implementados |
 
 ## Reglas de mantenimiento
 
-- Agregar una fila en el mismo cambio que implementa un endpoint.
-- Actualizar también la tabla resumida de `README.md`.
-- Registrar el método y la ruta exactos, respetando mayúsculas y parámetros reales.
-- Identificar el módulo propietario.
-- Resumir request y response o enlazar su documentación cuando crezcan.
-- Indicar un estado verificable, por ejemplo `Implementado`, `Experimental` o `Deprecated` cuando esos estados existan en el proyecto.
-- No registrar rutas planificadas como si estuvieran implementadas.
-- No registrar endpoints de autenticación que no existan ni inventar el mecanismo Directus → ASP.NET Core.
-- Documentar cambios incompatibles y la estrategia de versionado una vez definida.
-- Documentar contratos de transporte, no Entities o Aggregate Roots de Domain.
-- Mantener la frontera `Domain/proyección → Response DTO → HTTP → TypeScript type`; los nombres y carpetas React no forman parte del contrato de la API.
-- Documentar únicamente errores y payloads públicos aprobados. No exponer stack traces, SQL, detalles SMTP, credenciales, configuración, nombres internos de proveedor ni excepciones de Domain/Application/Infrastructure.
-- Mantener diferenciados los errores de validación/precondición del caso de uso y los fallos técnicos, aunque el mapping y los códigos HTTP concretos se definirán al implementar el primer contrato.
+- Agregar una fila solo en el mismo cambio que implementa y verifica el endpoint.
+- Actualizar también la tabla del `README.md`.
+- Registrar método, ruta, módulo, visibilidad y contratos exactos.
+- No reservar rutas, códigos HTTP o mecanismos de autenticación futuros.
+- Documentar Request/Response DTOs, nunca Entities de Domain o TypeORM.
+- No exponer stack traces, SQL, credenciales, configuración ni detalles de proveedores.
+- Mantener separadas la API pública y la API interna para un CMS.
 
-## API pública
+## API pública futura
 
-Será consumida por React y contendrá las lecturas requeridas para mostrar Services y sus categorías activas, filtrar Projects publicados por Service/ServiceCategory y presentar CompanyProfile. También deberá incorporar el caso de uso público de envío del formulario mediante un Command y un port de correo, sin Directus y sin autenticación. Estas capacidades conceptuales no fijan rutas; solo se documentarán cuando estén implementadas.
+Cuando exista el frontend, el Cliente sin autenticación consumirá lecturas públicas de Portfolio, Services y CompanyProfile y podrá enviar el formulario de Contact. Presentation mapeará HTTP y despachará mediante `QueryBus` o `CommandBus` de `@nestjs/cqrs`.
 
-## API interna para mutaciones de Directus
+Las lecturas serán Queries sin efectos y proyectarán DTOs. El formulario futuro recibirá `SubmitContactRequestDto`, despachará un Command y compondrá `Client` + `ContactRequest`; no implicará persistencia histórica de ninguno ni involucrará Directus. El Command, Handler, ports y endpoint aún no existen.
 
-Será consumida principalmente por Filter Hooks bloqueantes de Directus para procesar create, update y delete antes de persistir. Estos endpoints despacharán Commands y devolverán un error o payload canónico; Directus ejecutará después la escritura final. No se usarán para cada consulta administrativa y no deben producir una segunda escritura con EF Core.
+## API interna futura
 
-Las rutas y el mecanismo de autenticación/autorización todavía no están implementados ni definidos. No inventarlos en este catálogo.
+Si Directus supera la PoC, sus Filter Hooks bloqueantes llamarán endpoints internos NestJS antes de cada mutación administrativa. El endpoint despachará un Command y responderá con error, aprobación o payload canónico. Directus realizará la única escritura final; NestJS/TypeORM no duplicará esa persistencia.
 
-## Información pendiente
+No se ha definido ruta ni contrato. La autenticación Directus → NestJS permanece pendiente en ADR-023; Directus sigue siendo provisional y no está desplegado ni validado en el Hostinger Business Web Hosting existente.
 
-Antes del primer endpoint deben establecerse Controllers o Minimal APIs, convención de rutas, estrategia de resultados/excepciones, tratamiento y mapping seguro de errores, validación, paginación y posible versionado de la API. Para el formulario también permanecen pendientes el contrato definitivo, proveedor y configuración técnica de `From`, validación del servicio mediante `Services/public/`, obtención del `To` mediante `CompanyProfile/public/`, protección antiabuso y mapeo seguro de fallos. Ninguna ruta ni código HTTP queda fijado por este catálogo.
+## Pendientes antes del primer endpoint
+
+Faltan los primeros casos de uso, convención de rutas, DTOs, validación, mapping de errores, versionado si fuera necesario, autenticación de API interna, tests HTTP y contratos reales. Ninguno se fija desde este catálogo.
