@@ -110,6 +110,33 @@ Estos elementos explican la historia; no forman parte del árbol activo.
 - [ ] Comprobar en ejecución que el registro público permanezca deshabilitado. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
 - [ ] Comprobar introspección de las diez tablas TypeORM sin alterar su esquema. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
 
+## Fase 4.6 — HU22 agregar información de contacto
+
+- [x] Modelar el caso de uso orientado al negocio `AgregarInformacionDeContactoCommand` con un contrato de entrada abierto (`IEntradaInformacionDeContacto`, sin enum ni unión cerrada de medios), sin handler CMS genérico ni `switch` por colección en Application.
+- [x] Implementar `AgregarInformacionDeContactoCommandHandler` como orquestador (puerto de lectura → validadoras → Value Objects → Aggregate → payload canónico), sin TypeORM ni escritura.
+- [x] Definir el contrato `IValidadora` y `ValidadoraTelefono` con `libphonenumber-js`, canonicalizando a E.164; conservar validez intrínseca en Value Objects y unicidad en el Aggregate.
+- [x] Crear el puerto de solo lectura `ICompanyProfileStateReader` y su adaptador TypeORM (evidencia de escritor único).
+- [x] Exponer el endpoint interno `POST /internal/cms/company-profile/contact-information` con DTOs y Mapper de Presentation.
+- [x] Resolver ADR-023: token técnico `Bearer` y `CmsInternalAuthGuard` con comparación de tiempo constante y fail closed.
+- [x] Implementar el Filter Hook bloqueante de Directus para `phone`/`email`/`social_link` create (fail closed); no interceptar update/delete/otras colecciones.
+- [x] Documentar variables `CMS_INTERNAL_TOKEN`, `BACKEND_INTERNAL_URL`, `BACKEND_INTERNAL_TOKEN` en los `.env.example`.
+- [x] Agregar tests unitarios de teléfono, handler, guard y hook; `npm test` en verde y `npm audit` del backend sin vulnerabilidades.
+- [ ] Verificación E2E real (MySQL + NestJS + Directus) del flujo canónico y fail closed. Pendiente de entorno con instancia/credenciales.
+- [ ] HU23 (modificar contacto), HU25 (modificar ubicación) y eliminación: pendientes en iteraciones posteriores.
+
+## Fase 4.7 — HU24 agregar ubicación
+
+- [x] Modelar el caso de uso `AgregarUbicacionCommand` orientado al negocio (`direccion`/`latitud`/`longitud`), sin Strategy (flujo único) ni handler CMS genérico.
+- [x] Implementar `AgregarUbicacionCommandHandler` como orquestador: reutiliza `ICompanyProfileStateReader` (solo lectura), rechaza si el perfil no existe o si ya hay ubicación (cardinalidad 0..1, sin sobrescribir), construye `Address`/`GeoCoordinates`/`CompanyLocation` y devuelve el resultado canónico; no persiste.
+- [x] Crear `Exceptions/UbicacionRechazadaException` traduciendo `InvalidValueObjectException`/`InvalidGeoCoordinatesException`; conservar las invariantes en los Value Objects (sin validadoras duplicadas).
+- [x] Exponer el endpoint interno `POST /internal/cms/company-profile/location` con DTOs y `AgregarUbicacionMapper`; el `company_profile_id` procede del Aggregate y se protege del Administrador.
+- [x] Extender la extensión `extensions/company-profile/` con `location.items.create` (ruta explícita, Bearer ADR-023, fail closed); sin interceptar update/delete; sin crear otra extensión.
+- [x] No almacenar enlace de Google Maps ni generar UUID para la ubicación; reutilizar la tabla `location` existente sin migration nueva.
+- [x] Agregar tests de handler (válido, canónico, dirección vacía, coordenadas fuera de rango, ubicación existente, perfil inexistente, single writer), mapper y hook de ubicación; `npm test` en verde.
+- [ ] Verificación E2E real (MySQL + NestJS + Directus) de la creación de ubicación, rechazo de segunda ubicación y fail closed. Pendiente de entorno con instancia/credenciales.
+- [ ] Configuración de UI de Directus (selección visual del punto en un mapa que rellene `latitude`/`longitude`): pendiente de una tarea posterior.
+- [ ] HU25 (modificar ubicación) y eliminación de ubicación: pendientes.
+
 ## Fase 5 — PoC de Directus en Hostinger
 
 Directus permanece provisional hasta completar todos los puntos:
@@ -133,7 +160,7 @@ Directus permanece provisional hasta completar todos los puntos:
 
 ## Fase 6 — Integración administrativa, condicionada a PoC
 
-- [ ] Completar ADR-023 y definir autenticación/autorización Directus → NestJS después de la PoC.
+- [x] Completar ADR-023 y definir la autenticación técnica Directus → NestJS (token `Bearer`, resuelto en HU22). La autorización de permisos finos sigue pendiente.
 - [ ] Configurar mínimo privilegio para Administradores.
 - [ ] Implementar endpoints internos sin inventar doble canal de persistencia.
 - [ ] Implementar Filter Hooks por operación/colección necesaria.
@@ -159,7 +186,7 @@ Directus permanece provisional hasta completar todos los puntos:
 - Resultado y decisión final de la PoC de Directus.
 - Estructura física del frontend futuro.
 - Versiones distintas de Node.js 22.
-- Autenticación Directus → NestJS según ADR-023 y permisos del CMS.
+- Permisos CRUD finos del CMS (la autenticación Directus → NestJS quedó resuelta en ADR-023).
 - Rutas, versionado, DTOs y estrategia de errores HTTP.
 - Límites transaccionales y concurrencia.
 - Efecto de desactivar Service/Category sobre Projects históricos.

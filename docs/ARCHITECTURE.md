@@ -11,7 +11,7 @@ Este documento es la fuente de verdad de la arquitectura vigente de Cromática C
 - Persistencia: TypeORM sobre MySQL, con TypeORM Migrations como autoridad estructural.
 - CMS candidato: Directus `12.3.0` incorporado/configurado localmente para HU09 y provisional hasta superar la PoC en el **Hostinger Business Web Hosting existente**.
 
-La fundación anterior fue reemplazada y retirada del árbol activo. El backend NestJS, Domain TypeScript, `@nestjs/cqrs`, TypeORM/MySQL, diez Persistence Models, cinco mappers, tres migrations modulares y tests están implementados. No existe frontend, casos de uso Application, Commands/Queries concretos, controllers ni endpoints. Directus existe como aplicación Node independiente; su ejecución contra MySQL se verifica solo cuando hay una instancia y credenciales reales disponibles.
+La fundación anterior fue reemplazada y retirada del árbol activo. El backend NestJS, Domain TypeScript, `@nestjs/cqrs`, TypeORM/MySQL, diez Persistence Models, cinco mappers, tres migrations modulares y tests están implementados. HU22 "Agregar información de contacto" y HU24 "Agregar ubicación" añaden los primeros casos de uso reales en CompanyProfile (Commands/Handlers, puerto de solo lectura reutilizado, controller interno con dos endpoints y Filter Hook de Directus); fuera de HU22/HU24 no existen otros Commands/Queries, controllers o endpoints, ni frontend, y HU23/HU25/eliminación siguen pendientes. Directus existe como aplicación Node independiente; su ejecución contra MySQL se verifica solo cuando hay una instancia y credenciales reales disponibles.
 
 ## Estructura física
 
@@ -239,6 +239,7 @@ HTTP → Controller → CommandBus / QueryBus → Handler → Domain / Applicati
 - No se crean Commands/Queries artificiales ni CRUD ceremonial.
 - CQRS no implica Event Sourcing; Event Sourcing no forma parte de la arquitectura.
 - Domain Events solo representan hechos relevantes y los Integration Events requieren consumidor real.
+- Cuando un Command tiene variantes extensibles por tipo, el Handler puede resolver una colección de estrategias inyectadas (patrón Strategy) para permanecer como orquestador y respetar OCP. No es una obligación global. Ejemplo vigente: `AgregarInformacionDeContactoCommandHandler → colección de Strategies → Strategy por tipo → Aggregate`.
 
 ## Persistencia TypeORM/MySQL
 
@@ -280,7 +281,7 @@ No existen schemas PostgreSQL, FKs cruzadas o dependencias Infrastructure → In
 
 Directus está incorporado y configurado localmente para HU09, pero todavía no es una capacidad adoptada para producción. La PoC debe realizarse en el **Hostinger Business Web Hosting existente**. No se afirma que Directus esté desplegado, funcione allí o sea oficialmente soportado para esta topología.
 
-HU09 cubre únicamente instalación Node, configuración de una misma MySQL, bootstrap, Administrador inicial, login nativo, rechazo de credenciales inválidas, registro público deshabilitado e introspección básica. No incorpora Filter Hooks, endpoints NestJS, Commands, permisos CRUD finales ni deployment. Las comprobaciones locales dependientes de MySQL se marcan según evidencia real en `ROADMAP.md`.
+HU09 cubre instalación Node, configuración de una misma MySQL, bootstrap, Administrador inicial, login nativo, rechazo de credenciales inválidas, registro público deshabilitado e introspección básica. HU22 añade el primer Filter Hook bloqueante (`phone`/`email`/`social_link` create), el endpoint interno NestJS `/internal/cms/company-profile/contact-information`, el primer Command administrativo y la autenticación técnica por token (ADR-023). HU24 amplía la misma extensión y controller con `location` create y el endpoint `/internal/cms/company-profile/location`. Permanecen abiertos los permisos CRUD finos, HU23/HU25, la eliminación y el deployment. Las comprobaciones locales dependientes de MySQL se marcan según evidencia real en `ROADMAP.md`.
 
 La PoC debe verificar:
 
@@ -299,7 +300,7 @@ La PoC debe verificar:
 13. carga de extensions;
 14. supervivencia de uploads/extensions tras reinicio o redeploy.
 
-Si falla, se reconsiderará el CMS mediante una ADR futura; esta arquitectura no selecciona una alternativa. Autenticación Directus → NestJS sigue pendiente en ADR-023; permisos, almacenamiento y operación también continúan abiertos.
+Si falla, se reconsiderará el CMS mediante una ADR futura; esta arquitectura no selecciona una alternativa. La autenticación técnica Directus → NestJS quedó resuelta en ADR-023 (token `Bearer` dedicado por ambiente); permisos CRUD finos, almacenamiento y operación continúan abiertos.
 
 ## Frontend React/Vite — fase futura
 
@@ -330,7 +331,7 @@ Projection / Domain → Response DTO → HTTP → TypeScript type
 
 - Cliente sin autenticación; no puede mutar contenido administrado.
 - Administrador usa el CMS provisional; no se crea autenticación NestJS propia para personas en V1.
-- Directus → NestJS debe autenticarse antes de producción, pero ADR-023 mantiene el mecanismo pendiente.
+- Directus → NestJS se autentica con un token técnico `Bearer` dedicado (`CMS_INTERNAL_TOKEN`), comparado con tiempo constante y con diseño fail closed (ADR-023).
 - MySQL y secretos no se exponen al Cliente ni se versionan.
 - Lecturas proyectadas, cancelación cuando aplique, prevención de N+1 y paginación solo con necesidad real.
 - Caching, observabilidad y optimización se incorporan con métricas y requisitos.
@@ -339,6 +340,6 @@ Projection / Domain → Response DTO → HTTP → TypeScript type
 
 Vigentes: monolito modular, arquitectura hexagonal física por contexto, ownership modular de persistencia/migrations, un DataSource técnico, ausencia de Shared Kernel, cuatro Bounded Contexts, React público futuro, contenido institucional estático, Node.js 22/NestJS/TypeScript, `@nestjs/cqrs`, TypeORM/MySQL, deployment objetivo en el Hostinger Business Web Hosting existente y regla de Filter Hook/escritor único como diseño sujeto a la validación de Directus.
 
-Abiertas: resultado de la PoC, adopción final del CMS, autenticación Directus → NestJS según ADR-023, endpoints, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías, transacciones, observabilidad y operación. La aplicación de la migration contra una instancia MySQL real también está pendiente de entorno.
+Abiertas: resultado de la PoC, adopción final del CMS, permisos CRUD finos de Directus, HU23/HU24/HU25 y eliminación de información de contacto, endpoints públicos, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías, transacciones, observabilidad y operación. La aplicación de la migration contra una instancia MySQL real también está pendiente de entorno. La autenticación técnica Directus → NestJS dejó de estar abierta: se resolvió en ADR-023.
 
 El historial y estado formal se encuentran en [DECISIONS.md](DECISIONS.md).

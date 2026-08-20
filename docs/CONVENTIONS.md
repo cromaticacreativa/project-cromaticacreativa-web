@@ -80,6 +80,7 @@ Los nombres de clases usan sufijos `Command`, `CommandHandler`, `Query`, `QueryH
 - Recibe ports por Dependency Injection y delega invariantes a Domain.
 - No accede a implementaciones internas de otros contextos.
 - No contiene reglas HTTP ni construye dependencias técnicas manualmente.
+- Cuando un caso de uso tiene variantes extensibles por tipo, puede usarse el patrón Strategy para que el Handler quede como orquestador y respete OCP: se inyecta una colección de estrategias (token local del caso de uso) y cada estrategia declara si soporta la entrada. No es obligatorio para todo Command ni debe introducirse por simetría; solo cuando existen esas variantes. Las implementaciones de estrategia viven en `{Context}.Application/Strategies` y su contrato en `{Context}.Application/Ports`. Ejemplo: `AgregarInformacionDeContactoCommandHandler` resuelve las estrategias de teléfono, correo y red social de CompanyProfile.
 
 ## Domain
 
@@ -175,7 +176,7 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - Las aplicaciones/herramientas técnicas externas al backend viven bajo `infrastructure/`, no bajo `backend/src/Infrastructure/`.
 - El CMS administrativo independiente vive exactamente en `infrastructure/CMS/Directus/` y tiene su propio `package.json`, `package-lock.json`, `.env`, proceso Node, extensions y uploads.
 - Directus no es un Bounded Context ni un módulo NestJS. No se le aplican las capas Domain/Application/Infrastructure/Presentation ni la nomenclatura `{Context}.{Layer}`.
-- Las extensions futuras viven en `infrastructure/CMS/Directus/extensions/`; HU09 no materializa Filter Hooks, endpoints, interfaces, módulos o displays.
+- Las extensions viven en `infrastructure/CMS/Directus/extensions/` y se organizan por módulo/Bounded Context, no por Historia de Usuario. La extensión estable de CompanyProfile es `extensions/company-profile/` (Filter Hook); actualmente implementa las creaciones de `phone`/`email`/`social_link` de HU22 y crecerá de forma incremental. No crear extensions `hu23-*`, `hu24-*`, etc. HU09 no incluía extensions.
 - Directus y el DataSource TypeORM se conectan a una misma base MySQL. Las variables `DB_HOST`, `DB_PORT` y `DB_DATABASE` deben corresponder a `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_DATABASE`.
 - TypeORM Migrations controla la estructura de las tablas de negocio; el Data Model de Directus no se usa para crear o alterar sus columnas, constraints o relaciones.
 - El bootstrap oficial de Directus controla únicamente sus tablas internas `directus_*` y el primer Administrador.

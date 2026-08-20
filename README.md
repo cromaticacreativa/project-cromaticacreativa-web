@@ -25,7 +25,7 @@ La aplicación tendrá cuatro Bounded Contexts: `Portfolio`, `Services`, `Compan
 
 La fundación backend está migrada y verificada: `backend/` contiene la aplicación NestJS, Domain TypeScript para los cuatro contextos, un único `DataSource` TypeORM/MySQL, diez Persistence Models, cinco mappers y tres migrations separadas por ownership modular.
 
-No existen casos de uso de Application, Commands/Queries concretos, ports con consumidor, controllers ni endpoints. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus está incorporado en `infrastructure/CMS/Directus/` para HU09; las verificaciones que requieren MySQL deben registrarse con evidencia real y la PoC de Hostinger sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
+HU22 "Agregar información de contacto" y HU24 "Agregar ubicación" materializan los primeros casos de uso reales en CompanyProfile: los Commands `AgregarInformacionDeContacto` y `AgregarUbicacion` con sus Handlers, el puerto de solo lectura `ICompanyProfileStateReader`, un controller interno con dos endpoints y el Filter Hook de Directus. Fuera de HU22/HU24 no existen todavía otros Commands/Queries, ports con consumidor, controllers ni endpoints públicos; HU23 (modificar contacto), HU25 (modificar ubicación) y la eliminación siguen pendientes. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus está incorporado en `infrastructure/CMS/Directus/` (HU09) y con la extensión de CompanyProfile (`extensions/company-profile/`, cuyo alcance actual cubre HU22 y HU24); las verificaciones que requieren MySQL deben registrarse con evidencia real y la PoC de Hostinger sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
 
 ```text
 project-cromaticacreativa-web/
@@ -221,13 +221,15 @@ No se fijan versiones distintas de Node.js 22 hasta que una implementación real
 
 ## Endpoints
 
-Actualmente no hay endpoints implementados ni rutas definidas.
+No hay endpoints públicos. HU22 y HU24 implementan endpoints internos administrativos, invocados únicamente por el Filter Hook de Directus y protegidos con el token técnico `CMS_INTERNAL_TOKEN` (ADR-023).
 
 | Método | Endpoint | Módulo | Estado |
 | --- | --- | --- | --- |
-| — | — | — | No hay endpoints implementados |
+| POST | `/internal/cms/company-profile/contact-information` | CompanyProfile | Implementado (HU22, interno) |
+| POST | `/internal/cms/company-profile/location` | CompanyProfile | Implementado (HU24, interno) |
+| POST | `/internal/cms/company-profile/contact-request-recipient-email` | CompanyProfile | Implementado (validación del correo receptor, interno) |
 
-El catálogo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
+El catálogo completo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
 
 ## Desarrollo local
 

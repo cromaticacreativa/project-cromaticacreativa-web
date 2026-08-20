@@ -140,7 +140,7 @@ test('CompanyProfileMapper restaura colecciones ordenadas, recipient, WhatsApp y
 test('CompanyProfileMapper rechaza recipient y colecciones persistidas inválidas', () => {
   const invalidRecipient = profileModel();
   invalidRecipient.contactRequestRecipientEmail = '';
-  assert.throws(() => CompanyProfileMapper.toDomain(invalidRecipient), /correo electrónico no es válida/);
+  assert.throws(() => CompanyProfileMapper.toDomain(invalidRecipient), /correo electrónico no puede estar vacío/);
 
   const duplicatePhone = profileModel();
   duplicatePhone.phones.push(Object.assign(new PhonePersistenceModel(), {
@@ -165,7 +165,7 @@ test('CompanyProfileMapper rechaza recipient y colecciones persistidas inválida
   invalidLocation.location = Object.assign(new LocationPersistenceModel(), {
     companyProfileId: uuid(1), address: 'A', latitude: 91, longitude: 0,
   });
-  assert.throws(() => CompanyProfileMapper.toDomain(invalidLocation), /rangos válidos/);
+  assert.throws(() => CompanyProfileMapper.toDomain(invalidLocation), /latitud debe estar entre/);
 
   const invalidOrder = profileModel();
   invalidOrder.phones[0]!.displayOrder = -1;
