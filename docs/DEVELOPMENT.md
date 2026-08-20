@@ -4,7 +4,7 @@ Esta guía describe el desarrollo sobre la fundación Node.js/NestJS activa.
 
 ## Estado del entorno y transición
 
-El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. Directus `12.3.0` está incorporado en `infrastructure/CMS/Directus/` como aplicación Node independiente. El frontend no está implementado y tampoco existen casos de uso Application, controllers o endpoints.
+El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. Directus `12.3.0` está incorporado en `infrastructure/CMS/Directus/` como aplicación Node independiente, con la extensión estable `extensions/company-profile/`. HU22 "Agregar información de contacto" es el primer caso de uso Application real de CompanyProfile e incluye un endpoint interno (`/internal/cms/company-profile/contact-information`); no existen todavía endpoints públicos y, fuera de HU22, los demás casos de uso siguen pendientes. El frontend no está implementado.
 
 La implementación .NET/EF/PostgreSQL anterior fue retirada después de comprobar la equivalencia y solo permanece en Git/ADRs históricas.
 
@@ -38,8 +38,10 @@ Antes de cambiar código:
 | Value Object | `modules/{Context}/{Context}.Domain/ValueObjects/{Name}.ts` |
 | Interfaz genuina de Domain | `modules/{Context}/{Context}.Domain/Abstract/I{Name}.ts` |
 | Command / Query / Handler | `modules/{Context}/{Context}.Application/Commands` o `Queries` |
-| Port requerido por un caso de uso | `modules/{Context}/{Context}.Application/Ports/I{Capability}Port.ts` |
-| Validación de caso de uso | `modules/{Context}/{Context}.Application/Validations/{Name}.ts` |
+| Port o interfaz consumida por Application | `modules/{Context}/{Context}.Application/Ports/I{Name}.ts` |
+| Strategy de un caso de uso (implementación) | `modules/{Context}/{Context}.Application/Strategies/{Name}Strategy.ts` |
+| Validación de caso de uso (implementación) | `modules/{Context}/{Context}.Application/Validations/{Name}.ts` |
+| Excepción propia de Application | `modules/{Context}/{Context}.Application/Exceptions/{Name}Exception.ts` |
 | Implementación de un Port | `modules/{Context}/{Context}.Infrastructure/Adapters` o `Persistence` |
 | Persistence Model | `modules/{Context}/{Context}.Infrastructure/Persistence/Models/{Name}PersistenceModel.ts` |
 | Mapper Domain ↔ Persistence | `modules/{Context}/{Context}.Infrastructure/Persistence/Mappers/{Name}Mapper.ts` |
@@ -83,7 +85,7 @@ Las consultas administrativas ordinarias serían directas mediante Data Studio s
 
 No incluir DataSource, repositories TypeORM, Persistence Models, Directus o proveedores en un Command.
 
-Para una mutación administrativa, el Handler devuelve error, aprobación o payload canónico. Puede leer estado, pero no ejecuta el `INSERT`, `UPDATE` o `DELETE` final de la misma operación: Directus sería el escritor final único.
+Para un CREATE o UPDATE administrativo gobernado por Application/Domain, el Handler devuelve error, aprobación o payload canónico. Puede leer estado, pero no ejecuta el `INSERT` o `UPDATE` final de la misma operación: Directus es el escritor final único. Los DELETE administrativos se ejecutan directamente en Directus y no requieren Command, Handler, Strategy, validación o endpoint backend mientras no exista una regla de negocio adicional. Si una eliminación adquiere una invariante en el futuro, se reevaluará esa operación concreta.
 
 ## Agregar un port
 
@@ -121,9 +123,9 @@ No usar `synchronize: true`. Mantener el único DataSource técnico global, migr
 
 Para CompanyProfile, mapear colecciones Domain sin IDs a filas técnicas: phone, email y social_link conservan UUID de Infrastructure cuando persiste el mismo valor lógico; location usa `company_profile_id` como PK/FK. WhatsApp se modela como SocialLink. El destinatario interno vive en `company_profile` y nunca se mezcla automáticamente con los emails públicos.
 
-## Mutación administrativa y Directus
+## CREATE/UPDATE administrativos y Directus
 
-Este flujo solo se implementará si Directus supera la PoC:
+Patrón general de un CREATE o UPDATE administrativo:
 
 1. Filter Hook bloqueante antes de persistir.
 2. Llamada autenticada a un endpoint interno NestJS.
@@ -135,7 +137,64 @@ Este flujo solo se implementará si Directus supera la PoC:
 8. Escritura final única de Directus.
 9. Prueba explícita de ausencia de doble escritura.
 
-La autenticación Hook → NestJS sigue pendiente según ADR-023. No elegir API key, JWT, OAuth, mTLS u otra opción sin completar esa decisión.
+La autenticación Hook → NestJS usa el token técnico `Bearer` de ADR-023 (`CMS_INTERNAL_TOKEN`/`BACKEND_INTERNAL_TOKEN`); no elegir otro mecanismo sin una nueva ADR.
+
+DELETE sigue un flujo distinto: confirmación y permisos administrativos en Directus → DELETE directo, sin Filter Hook ni NestJS. No crear endpoint, Command, Handler, Strategy o validación backend para eliminar mientras no exista una regla de negocio adicional. Si aparece una invariante futura, reevaluar solo esa eliminación.
+
+## HU22 — Agregar información de contacto
+
+Implementación real de referencia del patrón anterior. Cubre creaciones de `phone`, `email` y `social_link`, y el cambio del correo receptor por la misma familia de Strategies.
+
+- Application: `Commands/AgregarInformacionDeContacto/` contiene únicamente el `Command` y el `Handler` orquestador. El `Command` solo transporta una entrada abierta; no declara enums, uniones de variantes ni resultados. El `Handler` no contiene `switch`/`if` por tipo ni importa `EmailAddress`: carga el Aggregate una vez y resuelve polimórficamente una Strategy compatible. Cada Strategy es propietaria de su identificador (`TIPO_TELEFONO`, `TIPO_CORREO`, `TIPO_CORREO_RECEPTOR`, `TIPO_RED_SOCIAL`) y del narrowing de sus `datos`. `IResultadoInformacionDeContacto` es la base común; `IResultadoInformacionDeContactoOrdenado` exige `companyProfileId` y `displayOrder` para las colecciones públicas, mientras `IResultadoCorreoReceptor` no admite esos campos. `AgregarCorreoStrategy` y `AgregarCorreoReceptorStrategy` comparten una sola `Validations/ValidadoraCorreo.ts`; esta construye `EmailAddress` y traduce `InvalidValueObjectException.reason` sin duplicar sus reglas. `ValidadoraTelefono` conserva la canonicalización E.164 con `libphonenumber-js`.
+- Infrastructure: `Adapters/CompanyProfileStateReader.ts` reconstruye el Aggregate con TypeORM (solo `findOne`); no escribe.
+- Presentation: `Controllers/CompanyProfileCmsController.ts`, sus DTOs y Mappers. `POST /internal/cms/company-profile/contact-information` usa `AgregarInformacionDeContactoMapper`; `POST /internal/cms/company-profile/contact-request-recipient-email` usa `AgregarCorreoReceptorMapper`, pero ambos despachan `AgregarInformacionDeContactoCommand`.
+- Seguridad: `src/Infrastructure/Security/CmsInternalAuthGuard.ts` protege `/internal/cms/*`.
+- Directus: `infrastructure/CMS/Directus/extensions/company-profile/` (Filter Hook estable de CompanyProfile, fail closed).
+
+Separación de validaciones: la validez intrínseca vive en los Value Objects, `ValidadoraCorreo` traduce los motivos de `EmailAddress` al rechazo Application compartido, la validación telefónica de plan vive en `ValidadoraTelefono`, y la unicidad de teléfono/correo/red permanece en el Aggregate `CompanyContactInformation`. WhatsApp es un `SocialLink`, nunca un teléfono. Los Value Objects reciben la entrada cruda (`unknown`) desde la frontera y rechazan `null`/`undefined`/no-string con mensajes específicos; sus límites de longitud coinciden con MySQL, de modo que un valor aprobado por Domain no falla luego por longitud:
+
+- `EmailAddress`: obligatorio; no vacío; ≤254; un solo `@`; parte local ≤64 sin punto inicial/final ni puntos consecutivos; dominio con al menos dos etiquetas válidas (sin `-` inicial/final ni etiquetas vacías); sin espacios. Canonicalización: el dominio se normaliza a minúsculas y la parte local se preserva (puede ser sensible a mayúsculas); esa normalización también permite detectar duplicados por dominio. Sin allowlist de proveedores ni transformaciones de Gmail.
+- `PhoneNumber` + `ValidadoraTelefono`: obligatorio; no vacío; plan de numeración real (`libphonenumber-js`); canónico E.164.
+- `SocialLink` (red) + `ExternalUrl`: red obligatoria/no vacía/≤100; URL obligatoria/no vacía/≤2048/HTTP o HTTPS absoluta. No se validan extensiones multimedia: un `SocialLink` es un perfil/canal, no un archivo.
+- `Address`: obligatoria; `trim`; no vacía; entre 10 y 500 caracteres. El mínimo es estructural y no exige palabras concretas ni existencia geográfica.
+- `GeoCoordinates`: números finitos; latitud [-90, 90]; longitud [-180, 180], con mensajes distintos por caso.
+
+Flujo de excepciones y mensajes: Domain lanza `InvalidValueObjectException`/`InvalidGeoCoordinatesException`; Application las traduce a `InformacionDeContactoRechazadaException`/`UbicacionRechazadaException` (para correo, exclusivamente mediante `ValidadoraCorreo`); el Controller las convierte en HTTP 422 y Presentation traduce `correo` a la columna de la frontera (`address` o `contact_request_recipient_email`). El Filter Hook propaga mensajes seguros de 4xx y usa uno genérico ante errores técnicos.
+
+Organización de `CompanyProfile.Application`: `Commands/` para casos de uso CQRS (Command + Handler); `Strategies/` para las implementaciones de Strategy de Application; `Ports/` para los contratos/interfaces que consume Application (`IEntradaInformacionDeContacto`, `IResultadoInformacionDeContacto`, `IAgregarInformacionDeContactoStrategy`, `ICompanyProfileStateReader`, `IValidadora`); `Validations/` para implementaciones concretas de validación; `Exceptions/` para excepciones propias; `Queries/` para lecturas CQRS. Las interfaces no se colocan junto a sus implementaciones ni en una carpeta `Interfaces`: van en `Ports`.
+
+Patrón Strategy (para respetar OCP): `Handler → colección de Strategies → Strategy por tipo → Aggregate`. Las Strategies se inyectan como una colección mediante un token del caso de uso (`AGREGAR_INFORMACION_DE_CONTACTO_STRATEGIES`); cada una declara `soporta(entrada)` y `ejecutar(...)`. Si ninguna soporta la entrada se rechaza; si más de una la soporta se trata como error de configuración. Como la entrada es un contrato abierto, agregar un medio nuevo no modifica el `Handler` ni un enum/unión central: se crea la Strategy con su propio identificador de tipo y se registra en el composition root; si además el medio llega por una colección/forma nueva de Directus, se extiende la traducción de frontera del Mapper de Presentation. Strategy no es obligatorio para todo Command: aplica cuando existen variantes extensibles por tipo.
+
+Precondición: `company_profile` (singleton) debe existir antes de agregar; HU22 no crea el perfil. Si no existe, el caso de uso rechaza la operación.
+
+### Ejecutar HU22 localmente
+
+1. Genere un token aleatorio y configúrelo en ambos lados: `CMS_INTERNAL_TOKEN` en `backend/.env` y el mismo valor en `BACKEND_INTERNAL_TOKEN` de `infrastructure/CMS/Directus/.env`, junto con `BACKEND_INTERNAL_URL` (p. ej. `http://localhost:3000`). Nunca versione el token.
+2. Con MySQL y las migrations al día, inicie el backend (`npm run start`) y Directus (`npm run start`).
+3. Asegure que exista la fila `company_profile`.
+4. Cree un `phone`, `email` o `social_link` desde Data Studio; verifique que el valor persistido sea el canónico devuelto por NestJS.
+5. Intente un teléfono inválido o duplicado y verifique que Directus cancele la creación y MySQL no cambie.
+6. Si el entorno no ofrece MySQL/Directus reales, documente los pasos como verificación manual pendiente; no invente resultados.
+
+## HU24 — Agregar ubicación
+
+Segundo caso de uso administrativo de CompanyProfile. Es un flujo único (no usa Strategy: no hay variantes por tipo) y solo cubre la **creación** de la ubicación.
+
+- Application: `Commands/AgregarUbicacion/` (`AgregarUbicacionCommand` con `direccion`/`latitud`/`longitud` y el `Handler` orquestador), el resultado `Ports/IResultadoUbicacion.ts` y el rechazo de negocio `Exceptions/UbicacionRechazadaException.ts`. Reutiliza el puerto de solo lectura `ICompanyProfileStateReader` (no se crea un repositorio de ubicación).
+- Domain: `Address` (`trim`, no vacío y longitud 10..500), `GeoCoordinates` (finitos, latitud [-90,90], longitud [-180,180]) y `CompanyLocation` (`Address` + `GeoCoordinates`). El Handler no duplica esas reglas; traduce `InvalidValueObjectException`/`InvalidGeoCoordinatesException` a `UbicacionRechazadaException`.
+- Cardinalidad 0..1: el Handler rechaza si `informacion.location !== null` (no sobrescribe; modificar es HU25). `CompanyContactInformation.setLocation` se usa en memoria; NestJS no persiste.
+- Presentation: endpoint `POST /internal/cms/company-profile/location` en `CompanyProfileCmsController`, sus DTOs y `Mappers/AgregarUbicacionMapper.ts` (traduce `address`/`latitude`/`longitude` ↔ `direccion`/`latitud`/`longitud`; el `company_profile_id` canónico procede del Aggregate, no del Administrador).
+- Directus: la misma extensión `extensions/company-profile/` añade `location.items.create` con ruta explícita; reutiliza `CmsInternalAuthGuard`, el token de ADR-023 y el diseño fail closed. No se almacena enlace de Google Maps; solo `address`/`latitude`/`longitude`.
+
+Persistencia: la tabla `location` ya existe (`company_profile_id` como PK/FK, `address`, `latitude`, `longitude`); HU24 no crea migration, no agrega `id` ni columnas de mapa y no genera UUID para la ubicación.
+
+### Ejecutar HU24 localmente
+
+1. Con el token configurado (igual que HU22) y `company_profile` (singleton) existente pero **sin** fila en `location`, inicie backend y Directus.
+2. Cree una `location` válida desde Data Studio; verifique que se persista el `address` canónico (trim) y las coordenadas devueltas por NestJS, con el `company_profile_id` del singleton.
+3. Intente crear una segunda `location`: NestJS rechaza (422) y Directus cancela; MySQL conserva solo la primera.
+4. Intente coordenadas fuera de rango, dirección vacía o una dirección trivial como `a`: Directus cancela y MySQL no cambia.
+5. Si el entorno no ofrece MySQL/Directus reales, documente los pasos como verificación manual pendiente; no invente resultados.
 
 ## Ejecutar Directus localmente — HU09
 

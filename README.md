@@ -17,7 +17,7 @@ Monorepo para el sitio público de Cromática Creativa y su backend modular.
 
 El backend está implementado sobre Node.js 22, TypeScript y NestJS como monolito modular con DDD pragmático y arquitectura hexagonal. La composición usa Dependency Injection de NestJS; `@nestjs/cqrs` está preparado para futuros Commands, Queries y Handlers reales. TypeORM accede a MySQL desde Infrastructure y sus migrations versionadas son la autoridad estructural.
 
-Directus `12.3.0` está incorporado y configurado localmente como aplicación Node independiente para HU09. Continúa siendo un candidato provisional: su adopción definitiva depende de una prueba de concepto sobre el **Hostinger Business Web Hosting existente**. No está desplegado ni validado en ese entorno y no se afirma soporte oficial. Si la PoC falla, el CMS se reconsiderará en una ADR futura sin seleccionar anticipadamente una alternativa. La autenticación técnica Directus → NestJS está pendiente en ADR-023 y es distinta del login nativo del Administrador.
+Directus `12.3.0` está incorporado y configurado localmente como aplicación Node independiente para HU09. Continúa siendo un candidato provisional: su adopción definitiva depende de una prueba de concepto sobre el **Hostinger Business Web Hosting existente**. No está desplegado ni validado en ese entorno y no se afirma soporte oficial. Si la PoC falla, el CMS se reconsiderará en una ADR futura sin seleccionar anticipadamente una alternativa. La autenticación técnica Directus → NestJS está resuelta por el token `Bearer` de ADR-023 y es distinta del login nativo del Administrador.
 
 La aplicación tendrá cuatro Bounded Contexts: `Portfolio`, `Services`, `CompanyProfile` y `Contact`. React consumirá únicamente la API REST de NestJS; nunca Directus ni MySQL.
 
@@ -25,7 +25,7 @@ La aplicación tendrá cuatro Bounded Contexts: `Portfolio`, `Services`, `Compan
 
 La fundación backend está migrada y verificada: `backend/` contiene la aplicación NestJS, Domain TypeScript para los cuatro contextos, un único `DataSource` TypeORM/MySQL, diez Persistence Models, cinco mappers y tres migrations separadas por ownership modular.
 
-No existen casos de uso de Application, Commands/Queries concretos, ports con consumidor, controllers ni endpoints. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus está incorporado en `infrastructure/CMS/Directus/` para HU09; las verificaciones que requieren MySQL deben registrarse con evidencia real y la PoC de Hostinger sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
+HU22 "Agregar información de contacto" y HU24 "Agregar ubicación" materializan los primeros casos de uso reales en CompanyProfile: los Commands `AgregarInformacionDeContacto` y `AgregarUbicacion` con sus Handlers, el puerto de solo lectura `ICompanyProfileStateReader`, un controller interno y el Filter Hook de Directus. El cambio del correo receptor reutiliza `AgregarInformacionDeContactoCommand` mediante `AgregarCorreoReceptorStrategy`; no existe un Command paralelo para validar ese campo. HU23/HU25 completas siguen pendientes. Las operaciones CREATE y UPDATE iniciadas en Directus pasan por sus Hooks y por NestJS antes de que Directus persista; los DELETE se ejecutan directamente en Directus, sin Hook ni NestJS, conforme al alcance vigente de ADR-019. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus está incorporado en `infrastructure/CMS/Directus/` (HU09); las verificaciones que requieren MySQL deben registrarse con evidencia real y la PoC de Hostinger sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
 
 ```text
 project-cromaticacreativa-web/
@@ -57,7 +57,7 @@ project-cromaticacreativa-web/
 
 `backend/src/Infrastructure/` es la capa técnica interna de NestJS. `infrastructure/CMS/Directus/` es otra aplicación y proceso Node, con sus propias dependencias, variables y futuro deployment; no es un Bounded Context ni participa en el build TypeScript del backend.
 
-Las carpetas sin una responsabilidad implementada se conservan con `.gitkeep`; no contienen placeholders funcionales. No existe `shared/domain`, Shared Kernel, Commons global ni una capa global `src/database`. `{Context}.Commons` es local al módulo y no constituye una quinta capa: sus DTOs son contratos planos internos entre adaptadores/mappers del mismo contexto y no representan HTTP. Los Request/Response DTOs de una frontera HTTP pertenecen a `{Context}.Presentation/DTOs` solo cuando existe un contrato de transporte real. Domain no depende de ninguno de los dos. Actualmente `CompanyProfile.Presentation` contiene solo `Controllers` y `Mappers`; `Contact.Presentation` contiene además `DTOs/SubmitContactRequestDto.ts` para la futura frontera HTTP del formulario. `Domain/Abstract` admite solo interfaces con prefijo `I`; las bases locales de Value Objects viven en `Domain/ValueObjects/Base`.
+Las carpetas sin una responsabilidad implementada se conservan con `.gitkeep`; no contienen placeholders funcionales. No existe `shared/domain`, Shared Kernel, Commons global ni una capa global `src/database`. `{Context}.Commons` es local al módulo y no constituye una quinta capa: sus DTOs son contratos planos internos entre adaptadores/mappers del mismo contexto y no representan HTTP. Los Request/Response DTOs de una frontera HTTP pertenecen a `{Context}.Presentation/DTOs` solo cuando existe un contrato de transporte real. Domain no depende de ninguno de los dos. Actualmente `CompanyProfile.Presentation` contiene `Controllers`, `Mappers` y DTOs de sus fronteras HTTP; `Contact.Presentation` contiene `DTOs/SubmitContactRequestDto.ts` para la futura frontera HTTP del formulario. `Domain/Abstract` admite solo interfaces con prefijo `I`; las bases locales de Value Objects viven en `Domain/ValueObjects/Base`.
 
 ## Actores y alcance V1
 
@@ -123,7 +123,7 @@ flowchart LR
 
 Si la PoC resulta satisfactoria, las lecturas administrativas ordinarias serán directas y no pasarán por NestJS.
 
-### Mutación administrativa
+### CREATE y UPDATE administrativos
 
 ```mermaid
 flowchart LR
@@ -139,7 +139,17 @@ flowchart LR
     directus --> mysql[("MySQL: escritura final única")]
 ```
 
-NestJS/TypeORM puede leer estado para procesar el Command, pero no ejecuta el `INSERT`, `UPDATE` o `DELETE` final de esa misma mutación. Directus es el único escritor final después de la aprobación. Esta regla evita la doble escritura.
+El diagrama aplica a CREATE y UPDATE de datos de negocio iniciados en Directus. NestJS/TypeORM puede leer estado para procesar el Command, pero no ejecuta el `INSERT` o `UPDATE` final de esa misma operación. Directus cancela el cambio rechazado o realiza la escritura final del payload aprobado. Esta regla evita la doble escritura y mantiene Application/Domain como autoridad de reglas e invariantes para altas y modificaciones.
+
+### DELETE administrativo
+
+```mermaid
+flowchart LR
+    administrador["Administrador"] --> directus["Directus — autenticación, autorización y confirmación"]
+    directus --> mysql[("MySQL: DELETE directo")]
+```
+
+Todos los DELETE administrativos se ejecutan directamente desde Directus y no pasan por un Filter Hook, NestJS, Application o Domain. Actualmente la eliminación no tiene reglas de negocio adicionales que justifiquen ese recorrido. Si una operación de eliminación incorpora una invariante o regla de negocio en el futuro, su flujo deberá reevaluarse de manera concreta.
 
 ### Formulario público de contacto
 
@@ -195,7 +205,7 @@ La PoC en el **Hostinger Business Web Hosting existente** debe verificar:
 5. introspección de tablas del dominio creadas externamente;
 6. ejecución de Filter Hooks bloqueantes;
 7. llamada del Hook a NestJS;
-8. aprobación y rechazo de mutaciones;
+8. aprobación y rechazo de CREATE/UPDATE;
 9. canonicalización del payload;
 10. persistencia posterior a la aprobación;
 11. ausencia de doble escritura;
@@ -221,13 +231,17 @@ No se fijan versiones distintas de Node.js 22 hasta que una implementación real
 
 ## Endpoints
 
-Actualmente no hay endpoints implementados ni rutas definidas.
+No hay endpoints públicos. HU22 y HU24 implementan endpoints internos administrativos, invocados únicamente por el Filter Hook de Directus y protegidos con el token técnico `CMS_INTERNAL_TOKEN` (ADR-023).
 
 | Método | Endpoint | Módulo | Estado |
 | --- | --- | --- | --- |
-| — | — | — | No hay endpoints implementados |
+| POST | `/internal/cms/company-profile/contact-information` | CompanyProfile | Implementado (HU22, interno) |
+| POST | `/internal/cms/company-profile/location` | CompanyProfile | Implementado (HU24, interno) |
+| POST | `/internal/cms/company-profile/contact-request-recipient-email` | CompanyProfile | Implementado con `AgregarInformacionDeContactoCommand` + Strategy (interno) |
+| POST | `/internal/cms/company-profile/contact-information/modify` | CompanyProfile | Implementado (HU23, interno; Strategy por tipo) |
+| POST | `/internal/cms/company-profile/location/modify` | CompanyProfile | Implementado (HU25, interno) |
 
-El catálogo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
+El catálogo completo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
 
 ## Desarrollo local
 

@@ -99,7 +99,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - Declara ports por capacidad; no repositories genéricos.
 - Valida entrada, existencia y precondiciones; Domain protege invariantes.
 - No depende de TypeORM, MySQL, Nest controllers, Directus o implementaciones concretas.
-- En una mutación de Directus, el Command autoriza, rechaza o canonicaliza; no hace la escritura final.
+- En un CREATE o UPDATE iniciado desde Directus, el Command autoriza, rechaza o canonicaliza; no hace la escritura final. Los DELETE no crean Commands porque se ejecutan directamente en Directus.
 - Los ports externos requeridos por casos de uso viven en `Application/Ports`; las validaciones del caso de uso viven en `Application/Validations`.
 - No crear interfaces o validaciones artificiales cuando todavía no exista un caso de uso consumidor; conservar la carpeta con `.gitkeep`.
 - Todas las interfaces de Domain y Application usan prefijo `I`.
@@ -116,7 +116,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - Mantener UUID como `CHAR(36)` ASCII/binario, tablas singulares `snake_case` y la portada única mediante `cover_marker`, columna generada nullable independiente de `project_id`, con `UNIQUE (project_id, cover_marker)`.
 - Configurar constraints, índices, cardinalidades y delete behaviors cuando exista el modelo real.
 - Evitar N+1; proyectar lecturas y no reconstruir Aggregates si un DTO basta.
-- TypeORM puede leer estado durante una mutación de Directus, pero no duplica su escritura final.
+- TypeORM puede leer estado durante un CREATE o UPDATE de Directus, pero no duplica su escritura final.
 - `randomUUID()` puede usarse en Infrastructure para IDs puramente técnicos de persistencia; esa autorización no se extiende a Domain.
 
 ### Presentation
@@ -128,7 +128,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - Los DTOs Request/Response de transporte HTTP viven en `{Context}.Presentation/DTOs` solo con una frontera real; los DTOs internos de persistencia/adaptadores viven en `{Context}.Commons/DTOs`. Domain no depende de ninguno.
 - Los DTOs internos de CompanyProfile viven en `CompanyProfile.Commons/DTOs`; su Presentation contiene únicamente `Controllers` y `Mappers`. `SubmitContactRequestDto` permanece en `Contact.Presentation/DTOs` porque modela una futura frontera HTTP, aunque todavía no exista endpoint.
 
-## Directus y escritor único
+## Directus, Hooks y escritor único
 
 - Directus `12.3.0` está incorporado como aplicación Node independiente en `infrastructure/CMS/Directus/`; no es un Bounded Context, un módulo NestJS ni parte del build del backend.
 - Prohibido ubicar la aplicación CMS en `backend/src/Infrastructure/`, `backend/src/modules/Directus/` o un directorio raíz `cms/`. `backend/src/Infrastructure/` sigue siendo exclusivamente la capa interna del backend.
@@ -142,10 +142,13 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - No afirmar que Directus funciona en Hostinger ni que esa topología tiene soporte oficial.
 - Si la PoC falla, registrar una ADR antes de seleccionar otra solución.
 - Si se adopta, Directus lee tablas creadas externamente y TypeORM Migrations controla su estructura.
-- Toda mutación administrativa pasa por un Filter Hook bloqueante y un endpoint interno NestJS.
-- NestJS devuelve error, aprobación o payload canónico; Directus realiza el único `INSERT`, `UPDATE` o `DELETE` final.
+- Todo CREATE y UPDATE administrativo iniciado desde Directus pasa por un Filter Hook bloqueante y un endpoint interno NestJS.
+- En CREATE y UPDATE, NestJS devuelve error, aprobación o payload canónico; Directus realiza el único `INSERT` o `UPDATE` final.
+- Todo DELETE administrativo se ejecuta directamente en Directus, sin Filter Hook, endpoint, Command, Handler, Strategy o validación backend. Directus aplica autenticación, autorización, confirmación administrativa y ejecuta el `DELETE`.
+- Si una eliminación incorpora una regla de negocio en el futuro, reevaluar únicamente esa operación antes de hacerla pasar por NestJS.
 - Prohibir estrictamente la doble escritura.
-- Autenticación Directus → NestJS sigue pendiente según ADR-023; permisos, uploads, extensions y persistencia operativa también permanecen abiertos.
+- Autenticación técnica Directus → NestJS resuelta en ADR-023: token `Bearer` dedicado (`CMS_INTERNAL_TOKEN`/`BACKEND_INTERNAL_TOKEN`), comparación de tiempo constante, distinto por ambiente, fail closed y nunca versionado. Permisos CRUD finos, uploads, extensions y persistencia operativa permanecen abiertos.
+- HU22 "Agregar información de contacto" y HU24 "Agregar ubicación" están implementadas: Commands `AgregarInformacionDeContacto` y `AgregarUbicacion`, puerto de solo lectura reutilizado, controller interno `/internal/cms/company-profile/*` (contact-information y location) y Filter Hook de Directus para `phone`/`email`/`social_link`/`location` create. HU24 no usa Strategy (flujo único), rechaza si ya existe ubicación (0..1) y no almacena enlaces de mapas. La eliminación directa desde Directus es la decisión arquitectónica vigente y no requiere implementación backend.
 
 ## Frontend, contacto y seguridad
 
@@ -157,7 +160,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - `From` es técnico, `To` procede de CompanyProfile y `Reply-To` del Cliente.
 - Cliente sigue sin autenticación; no crear autenticación propia en V1.
 - No exponer MySQL a Internet ni versionar secretos.
-- Autenticar Directus → NestJS antes de producción sin inventar todavía el mecanismo.
+- Autenticar Directus → NestJS con el token técnico `Bearer` de ADR-023; no introducir otro mecanismo sin una nueva ADR.
 - Validar por nivel: React/Directus UX, Presentation transporte, Application caso de uso, Domain invariantes, MySQL integridad.
 - Domain Events solo para hechos relevantes; Integration Events solo con consumidor; no message brokers sin requisito.
 - No almacenar multimedia como BLOB/base64 del modelo de dominio; storage sigue pendiente.
@@ -167,6 +170,6 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - Consultar `docs/DEVELOPMENT.md` antes de agregar feature, módulo, entidad o migration.
 - Mantener `docs/ARCHITECTURE.md` como fuente de verdad y la documentación coherente con el estado real.
 - Agregar tests proporcionales cuando exista tooling y mantener Domain libre de I/O/frameworks.
-- NestJS, Domain TypeScript y TypeORM/MySQL tienen una fundación compilable y probada. Todavía no existen frontend, casos de uso Application, controllers de negocio o endpoints.
-- Directus está incorporado/configurado para HU09, pero siguen abiertas su verificación contra MySQL cuando el entorno no esté disponible, la autenticación técnica Hook → NestJS, el resultado de la PoC de Hostinger, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías y operación.
+- NestJS, Domain TypeScript y TypeORM/MySQL tienen una fundación compilable y probada. HU22 añade el primer caso de uso Application, controller interno y endpoint; fuera de HU22 no hay más casos de uso, controllers de negocio ni endpoints públicos, ni frontend.
+- Directus está incorporado/configurado para HU09 y con la extensión de HU22, pero siguen abiertas su verificación contra MySQL cuando el entorno no esté disponible, el resultado de la PoC de Hostinger, permisos CRUD finos, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías y operación.
 - Registrar toda decisión aprobada en `docs/DECISIONS.md`.

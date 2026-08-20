@@ -57,13 +57,13 @@ test('WhatsApp es un SocialLink y cada network puede aparecer una sola vez', () 
 
 test('CompanyLocation es Value Object sin ID y setLocation reemplaza su valor', () => {
   const value = profile();
-  const first = new CompanyLocation(new Address('A'), new GeoCoordinates(10, -20));
-  const equal = new CompanyLocation(new Address('A'), new GeoCoordinates(10, -20));
+  const first = new CompanyLocation(new Address('Dirección A'), new GeoCoordinates(10, -20));
+  const equal = new CompanyLocation(new Address('Dirección A'), new GeoCoordinates(10, -20));
   assert.ok(first.equals(equal));
   assert.equal('id' in first, false);
   value.setLocation(first);
   assert.ok(value.location?.equals(equal));
-  const replacement = new CompanyLocation(new Address('B'), new GeoCoordinates(11, -21));
+  const replacement = new CompanyLocation(new Address('Dirección B'), new GeoCoordinates(11, -21));
   value.setLocation(replacement);
   assert.ok(value.location?.equals(replacement));
   value.removeLocation();
@@ -72,10 +72,10 @@ test('CompanyLocation es Value Object sin ID y setLocation reemplaza su valor', 
 
 test('Value Objects validan correo, URL y rangos geográficos', () => {
   assert.throws(() => new EmailAddress('bad-address'), /no es válida/);
-  assert.throws(() => new GeoCoordinates(Number.NaN, 0), /rangos válidos/);
-  assert.throws(() => new GeoCoordinates(Infinity, 0), /rangos válidos/);
-  assert.throws(() => new GeoCoordinates(91, 0), /rangos válidos/);
-  assert.throws(() => new GeoCoordinates(0, -181), /rangos válidos/);
+  assert.throws(() => new GeoCoordinates(Number.NaN, 0), /valores numéricos finitos/);
+  assert.throws(() => new GeoCoordinates(Infinity, 0), /valores numéricos finitos/);
+  assert.throws(() => new GeoCoordinates(91, 0), /latitud debe estar entre -90 y 90/);
+  assert.throws(() => new GeoCoordinates(0, -181), /longitud debe estar entre -180 y 180/);
   assert.throws(() => new ExternalUrl('mailto:test@example.com'), /HTTP o HTTPS/);
   assert.throws(() => new ExternalUrl('/relative'), /HTTP o HTTPS/);
   assert.ok(new EmailAddress('a@example.com').equals(new EmailAddress('a@example.com')));
