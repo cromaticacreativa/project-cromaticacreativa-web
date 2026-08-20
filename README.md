@@ -17,7 +17,7 @@ Monorepo para el sitio público de Cromática Creativa y su backend modular.
 
 El backend está implementado sobre Node.js 22, TypeScript y NestJS como monolito modular con DDD pragmático y arquitectura hexagonal. La composición usa Dependency Injection de NestJS; `@nestjs/cqrs` está preparado para futuros Commands, Queries y Handlers reales. TypeORM accede a MySQL desde Infrastructure y sus migrations versionadas son la autoridad estructural.
 
-Directus es un candidato provisional para el backoffice. Su adopción depende de una prueba de concepto sobre el **Hostinger Business Web Hosting existente**. No está desplegado, configurado ni validado en ese entorno, y no se afirma soporte oficial. Si la PoC falla, el CMS se reconsiderará en una ADR futura sin seleccionar anticipadamente una alternativa. La autenticación técnica Directus → NestJS está pendiente en ADR-023 y no se considera resuelta por la PoC.
+Directus `12.3.0` está incorporado y configurado localmente como aplicación Node independiente para HU09. Continúa siendo un candidato provisional: su adopción definitiva depende de una prueba de concepto sobre el **Hostinger Business Web Hosting existente**. No está desplegado ni validado en ese entorno y no se afirma soporte oficial. Si la PoC falla, el CMS se reconsiderará en una ADR futura sin seleccionar anticipadamente una alternativa. La autenticación técnica Directus → NestJS está pendiente en ADR-023 y es distinta del login nativo del Administrador.
 
 La aplicación tendrá cuatro Bounded Contexts: `Portfolio`, `Services`, `CompanyProfile` y `Contact`. React consumirá únicamente la API REST de NestJS; nunca Directus ni MySQL.
 
@@ -25,25 +25,37 @@ La aplicación tendrá cuatro Bounded Contexts: `Portfolio`, `Services`, `Compan
 
 La fundación backend está migrada y verificada: `backend/` contiene la aplicación NestJS, Domain TypeScript para los cuatro contextos, un único `DataSource` TypeORM/MySQL, diez Persistence Models, cinco mappers y tres migrations separadas por ownership modular.
 
-No existen casos de uso de Application, Commands/Queries concretos, ports con consumidor, controllers ni endpoints. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus no está instalado y su PoC sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
+No existen casos de uso de Application, Commands/Queries concretos, ports con consumidor, controllers ni endpoints. El frontend no está implementado: React + TypeScript + Vite permanece como objetivo de una fase posterior. Directus está incorporado en `infrastructure/CMS/Directus/` para HU09; las verificaciones que requieren MySQL deben registrarse con evidencia real y la PoC de Hostinger sigue pendiente. La implementación .NET/EF/PostgreSQL anterior permanece únicamente en la historia de Git y ADRs históricas.
 
 ```text
-backend/src/
-├── modules/
-│   └── {Portfolio|Services|CompanyProfile|Contact}/
-│       ├── {Context}.Domain/{Abstract,Aggregates,Entities,ValueObjects,Enums,Exceptions}
-│       ├── {Context}.Application/{Ports,Validations,Commands,Queries}
-│       ├── {Context}.Infrastructure/{Persistence,Adapters}
-│       ├── {Context}.Presentation/
-│       │   ├── Controllers/
-│       │   ├── Mappers/
-│       │   └── DTOs/                 # solo con un contrato de transporte real
-│       ├── {Context}.Commons/DTOs
-│       └── {Context}Module.ts
-├── Infrastructure/{Configuration,Persistence}/
-├── AppModule.ts
-└── main.ts
+project-cromaticacreativa-web/
+├── backend/                              # aplicación NestJS
+│   └── src/
+│       ├── modules/
+│       │   └── {Portfolio|Services|CompanyProfile|Contact}/
+│       │       ├── {Context}.Domain/{Abstract,Aggregates,Entities,ValueObjects,Enums,Exceptions}
+│       │       ├── {Context}.Application/{Ports,Validations,Commands,Queries}
+│       │       ├── {Context}.Infrastructure/{Persistence,Adapters}
+│       │       ├── {Context}.Presentation/{Controllers,Mappers,DTOs}
+│       │       ├── {Context}.Commons/DTOs
+│       │       └── {Context}Module.ts
+│       ├── Infrastructure/{Configuration,Persistence}/ # capa interna NestJS
+│       ├── AppModule.ts
+│       └── main.ts
+├── infrastructure/
+│   └── CMS/
+│       └── Directus/                     # aplicación Node administrativa independiente
+│           ├── package.json
+│           ├── package-lock.json
+│           ├── .env.example
+│           ├── README.md
+│           ├── extensions/
+│           └── uploads/
+├── docs/
+└── README.md
 ```
+
+`backend/src/Infrastructure/` es la capa técnica interna de NestJS. `infrastructure/CMS/Directus/` es otra aplicación y proceso Node, con sus propias dependencias, variables y futuro deployment; no es un Bounded Context ni participa en el build TypeScript del backend.
 
 Las carpetas sin una responsabilidad implementada se conservan con `.gitkeep`; no contienen placeholders funcionales. No existe `shared/domain`, Shared Kernel, Commons global ni una capa global `src/database`. `{Context}.Commons` es local al módulo y no constituye una quinta capa: sus DTOs son contratos planos internos entre adaptadores/mappers del mismo contexto y no representan HTTP. Los Request/Response DTOs de una frontera HTTP pertenecen a `{Context}.Presentation/DTOs` solo cuando existe un contrato de transporte real. Domain no depende de ninguno de los dos. Actualmente `CompanyProfile.Presentation` contiene solo `Controllers` y `Mappers`; `Contact.Presentation` contiene además `DTOs/SubmitContactRequestDto.ts` para la futura frontera HTTP del formulario. `Domain/Abstract` admite solo interfaces con prefijo `I`; las bases locales de Value Objects viven en `Domain/ValueObjects/Base`.
 
@@ -51,7 +63,7 @@ Las carpetas sin una responsabilidad implementada se conservan con `.gitkeep`; n
 
 - **Cliente**: actor público sin cuenta, registro, login, perfil, roles ni permisos persistidos. Consulta contenido y puede enviar el formulario de contacto.
 - `Client`: Entity interna y efímera de `Contact.Domain` que compone los datos validados del remitente. Su `ClientId` no viene del frontend ni se persiste: Application/composition proporcionará el UUID al construirla; no es una cuenta.
-- **Administrador**: personal autorizado que administraría contenido mediante el CMS si Directus supera la PoC.
+- **Administrador**: personal autorizado con una cuenta previamente configurada en Directus. Su autenticación nativa pertenece al CMS y no a NestJS o React.
 - `CorporateClient`: Aggregate Root de `Portfolio` que representa una empresa o marca; no es el actor Cliente ni una cuenta.
 
 La V1 no incluye comercio electrónico, pagos, cuentas de Cliente, interacción entre Clientes, autenticación propia, roles propios del backend ni panel administrativo en React.
@@ -161,8 +173,16 @@ Solo `SubmitContactRequestDto` y la fundación Domain están materializados. El 
 - Portfolio, Services y CompanyProfile poseen sus propias carpetas `{Context}.Infrastructure/Persistence/{Models,Mappers,Configurations,Migrations}` y DTOs de persistencia planos en `{Context}.Commons/DTOs`. Contact no posee Persistence Models, tabla ni migration funcional.
 - CompanyProfile persiste el destinatario interno directamente en `company_profile.contact_request_recipient_email`. `phone` y `email` contienen filas públicas ordenadas; WhatsApp es una fila de `social_link`, no un tipo de teléfono.
 - `location` usa `company_profile_id` como PK/FK y exige address, latitude y longitude. Esta forma relacional no introduce identidad de negocio para `CompanyLocation`.
-- La portada única se protege dentro de Portfolio mediante `cover_project_id`, columna generada nullable con índice único: múltiples no-portadas producen `NULL` y solo una portada por Project puede producir su UUID.
-- Directus, si supera la PoC, introspeccionará tablas creadas externamente y no será autoridad del Data Model del dominio.
+- La portada única se protege dentro de Portfolio mediante `cover_marker = CASE WHEN is_cover = 1 THEN 1 ELSE NULL END`, columna generada nullable independiente de `project_id`, y `UNIQUE (project_id, cover_marker)`: múltiples no-portadas producen `NULL` y solo una portada por Project puede producir el marcador `1`.
+- Directus se configura contra la misma base MySQL, introspecciona tablas creadas externamente y no es autoridad del Data Model del dominio. Sus tablas internas `directus_*` sí son responsabilidad del bootstrap oficial de Directus.
+
+```mermaid
+flowchart LR
+    typeorm["TypeORM Migrations — schema de negocio"] --> mysql[("Una base MySQL")]
+    directus["Directus — datos + tablas internas directus_*"] --> mysql
+```
+
+Para HU09, el login administrativo es `Administrador → Directus Data Studio → autenticación local Directus → sesión Directus`; NestJS no interviene, el registro público permanece deshabilitado y el futuro React no implementa login administrativo.
 
 ## PoC obligatoria de Directus
 
@@ -194,7 +214,7 @@ Hasta completar estas pruebas, Directus es provisional.
 | CQRS | `@nestjs/cqrs`, `CommandBus` y `QueryBus` | Módulo configurado; casos de uso pendientes |
 | Persistencia | TypeORM y TypeORM Migrations | 10 Persistence Models, 5 mappers y 3 migrations modulares |
 | Datos | MySQL | Configuración validada; migration no aplicada por falta de instancia local |
-| CMS | Directus | Provisional; PoC pendiente |
+| CMS | Directus `12.3.0` sobre Node.js `>=22` | Incorporado/configurado para HU09; verificación MySQL local según entorno y PoC Hostinger pendientes |
 | Arquitectura | Monorepo, monolito modular, DDD pragmático y hexagonal | Decisión objetivo documentada |
 
 No se fijan versiones distintas de Node.js 22 hasta que una implementación real las requiera y verifique.
@@ -211,7 +231,7 @@ El catálogo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
 
 ## Desarrollo local
 
-El backend usa npm y versiona `backend/package-lock.json`. El paquete frontend se creará en una tarea posterior.
+El backend y Directus usan paquetes npm independientes y versionan sus propios lockfiles. El paquete frontend se creará en una tarea posterior.
 
 ```powershell
 cd backend
@@ -222,6 +242,19 @@ npm test
 ```
 
 La configuración MySQL usa `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` y `MYSQL_PASSWORD`; `PORT` configura el listener. Consulte `.env.example` y no versione secretos. Los scripts `migration:show`, `migration:run` y `migration:revert` usan el DataSource técnico único y requieren una instancia MySQL configurada; las migrations no se aplicaron a una base real en esta tarea.
+
+Después de aplicar las migrations de negocio, configure e inicie el CMS:
+
+```powershell
+cd infrastructure/CMS/Directus
+Copy-Item .env.example .env
+# Reemplace placeholders y use la misma MYSQL_DATABASE como DB_DATABASE.
+npm ci
+npm run bootstrap
+npm run start
+```
+
+Data Studio queda en `http://localhost:8055/admin`. `ADMIN_EMAIL` y `ADMIN_PASSWORD` aprovisionan el primer Administrador durante el bootstrap inicial; `SECRET`, credenciales MySQL, contraseña administrativa y credenciales SMTP reales nunca se versionan. El registro público está deshabilitado por defecto y no debe activarse. El reset por correo es nativo de Directus, pero el envío permanece preparado/no verificado hasta disponer de SMTP. La guía reproducible y el estado de comprobaciones están en [`infrastructure/CMS/Directus/README.md`](infrastructure/CMS/Directus/README.md).
 
 ## Documentación
 

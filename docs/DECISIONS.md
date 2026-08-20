@@ -410,15 +410,17 @@ El deployment objetivo se evaluará sobre el **Hostinger Business Web Hosting ex
 
 ### Contexto
 
-Directus podría evitar construir un panel administrativo, pero su ejecución, persistencia, extensions, uploads y comportamiento operativo en el hosting existente no han sido validados.
+Directus podría evitar construir un panel administrativo. HU09 autorizó incorporarlo localmente y comprobar su autenticación nativa, pero su ejecución, persistencia, extensions, uploads y comportamiento operativo en el hosting existente no han sido validados.
 
 ### Decisión
 
 Mantener Directus como candidato provisional. Antes de adoptarlo, ejecutar la PoC definida en `ARCHITECTURE.md` y `ROADMAP.md` sobre el Hostinger Business Web Hosting existente. No afirmar deployment funcional ni soporte oficial. Si la PoC falla, reconsiderar el CMS mediante una ADR futura sin seleccionar ahora una alternativa.
 
+Como evidencia estructural de HU09, Directus `12.3.0` está incorporado en `infrastructure/CMS/Directus/` como aplicación Node.js `>=22` independiente. Su configuración usa `DB_HOST`, `DB_PORT` y `DB_DATABASE` para apuntar a la misma MySQL que TypeORM configura con `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_DATABASE`; TypeORM conserva ownership de las diez tablas de negocio y el bootstrap oficial de Directus conserva ownership de `directus_*`. El primer Administrador se aprovisiona con `ADMIN_EMAIL`/`ADMIN_PASSWORD`, la autenticación administrativa pertenece a Directus y no se agrega configuración que habilite su registro público, deshabilitado por defecto. Las comprobaciones dependientes de una instancia MySQL se registran separadamente en `ROADMAP.md` según evidencia real.
+
 ### Consecuencias
 
-- Directus no se considera implementado ni aprobado definitivamente.
+- Directus se considera incorporado/configurado para HU09, pero no adoptado ni aprobado definitivamente para producción.
 - Deben verificarse Node.js 22, MySQL, tablas internas, Data Studio, introspección, hooks, NestJS, aprobación/rechazo, payload canónico, escritura única, uploads, extensions y supervivencia tras redeploy.
 - Autenticación Directus → NestJS permanece pendiente en ADR-023; permisos y operación también continúan abiertos.
 - React nunca consumirá Directus directamente.
@@ -473,7 +475,7 @@ Los archivos principales del backend usan PascalCase y un concepto principal por
 - La antigua carpeta de abstracciones Domain no se convierte en depósito de ports técnicos; `Application/Ports` define necesidades externas y Infrastructure las implementa.
 - Separar migrations por ownership no crea múltiples conexiones ni múltiples DataSources.
 - No se crean Commands, Queries, Handlers, ports, validaciones Application, controllers o DTOs sin consumidor real.
-- La portada única de Project continúa protegida dentro de Portfolio mediante columna generada nullable e índice único.
+- La portada única de Project continúa protegida dentro de Portfolio mediante `cover_marker`, columna generada nullable que no depende de `project_id`, y `UNIQUE (project_id, cover_marker)`; así `fk_media_project` conserva `ON DELETE CASCADE` bajo MySQL 8.4.
 - React/Vite, sus dependencias y su estructura se incorporarán en una fase posterior con `app`, `pages`, `features`, `components`, `hooks`, `services`, `types`, `utils` y `assets` según responsabilidades reales.
 
 ## ADR-021 — Módulos con capas nominales, Commons locales y composición de Contact

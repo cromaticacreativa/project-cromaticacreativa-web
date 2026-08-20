@@ -77,7 +77,22 @@ test('la configuración MySQL usa un DataSource, diez modelos, tres migrations y
   const source = new DataSource(options) as DataSource & { buildMetadatas(): Promise<void> };
   await source.buildMetadatas();
   assert.equal(source.entityMetadatas.length, 10);
-  assert.ok(source.entityMetadatas.some((metadata) => metadata.tableName === 'media'));
+  const mediaMetadata = source.entityMetadatas.find((metadata) => metadata.tableName === 'media');
+  assert.ok(mediaMetadata);
+  const coverMarker = mediaMetadata.findColumnWithPropertyName('coverMarker');
+  assert.ok(coverMarker);
+  assert.equal(coverMarker.databaseName, 'cover_marker');
+  assert.equal(coverMarker.type, 'tinyint');
+  assert.equal(coverMarker.asExpression, 'CASE WHEN `is_cover` = 1 THEN 1 ELSE NULL END');
+  assert.equal(coverMarker.generatedType, 'STORED');
+  const coverIndex = mediaMetadata.indices.find((index) => index.name === 'uq_media_project_cover');
+  assert.ok(coverIndex);
+  assert.equal(coverIndex.isUnique, true);
+  assert.deepEqual(coverIndex.columns.map((column) => column.propertyName), ['projectId', 'coverMarker']);
+  const projectRelation = mediaMetadata.findRelationWithPropertyPath('project');
+  assert.ok(projectRelation);
+  assert.equal(projectRelation.onDelete, 'CASCADE');
+  assert.equal(projectRelation.onUpdate, 'RESTRICT');
 });
 
 test('las migrations por módulo crean solo sus tablas propietarias y Contact no tiene tabla', async () => {
@@ -93,8 +108,12 @@ test('las migrations por módulo crean solo sus tablas propietarias y Contact no
   assert.match(portfolio, /CREATE TABLE project/);
   assert.match(portfolio, /CREATE TABLE media/);
   assert.doesNotMatch(portfolio, /CREATE TABLE service\b|CREATE TABLE company_profile|CREATE TABLE contact_request/i);
-  assert.match(portfolio, /CASE WHEN is_cover = 1 THEN project_id ELSE NULL END/);
-  assert.match(portfolio, /UNIQUE \(cover_project_id\)/);
+  assert.match(portfolio, /cover_marker TINYINT GENERATED ALWAYS AS/);
+  assert.match(portfolio, /CASE WHEN is_cover = 1 THEN 1 ELSE NULL END/);
+  assert.match(portfolio, /uq_media_project_cover UNIQUE \(project_id, cover_marker\)/);
+  assert.match(portfolio,
+    /fk_media_project FOREIGN KEY \(project_id\)\s+REFERENCES project \(id\) ON DELETE CASCADE ON UPDATE RESTRICT/);
+  assert.doesNotMatch(portfolio, /CASE WHEN is_cover = 1 THEN project_id ELSE NULL END/);
   assert.doesNotMatch(portfolio, /fk_project_service|fk_project_category/i);
 
   const services = await sqlFor(new CreateServicesSchema20260820000001());

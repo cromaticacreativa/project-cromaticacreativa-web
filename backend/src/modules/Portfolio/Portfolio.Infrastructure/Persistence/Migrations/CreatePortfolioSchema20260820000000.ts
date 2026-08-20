@@ -54,8 +54,8 @@ export class CreatePortfolioSchema20260820000000 implements MigrationInterface {
       type VARCHAR(16) NOT NULL,
       display_order INT UNSIGNED NOT NULL,
       is_cover BOOLEAN NOT NULL DEFAULT FALSE,
-      cover_project_id ${UUID} GENERATED ALWAYS AS (
-        CASE WHEN is_cover = 1 THEN project_id ELSE NULL END) STORED,
+      cover_marker TINYINT GENERATED ALWAYS AS (
+        CASE WHEN is_cover = 1 THEN 1 ELSE NULL END) STORED,
       CONSTRAINT pk_media PRIMARY KEY (id),
       CONSTRAINT fk_media_project FOREIGN KEY (project_id)
         REFERENCES project (id) ON DELETE CASCADE ON UPDATE RESTRICT,
@@ -63,7 +63,7 @@ export class CreatePortfolioSchema20260820000000 implements MigrationInterface {
       CONSTRAINT ck_media_type CHECK (type IN ('IMAGE', 'VIDEO')),
       CONSTRAINT ck_media_display_order CHECK (display_order >= 0),
       INDEX ix_media_project_id (project_id),
-      CONSTRAINT uq_media_project_cover UNIQUE (cover_project_id)
+      CONSTRAINT uq_media_project_cover UNIQUE (project_id, cover_marker)
     ) ${TABLE_OPTIONS}`);
   }
 
