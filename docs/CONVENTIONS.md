@@ -170,6 +170,18 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - Mantener HTML semántico, accesibilidad y diseño responsive.
 - No elegir librerías adicionales sin requisito y aprobación.
 
+## Aplicaciones externas de infraestructura
+
+- Las aplicaciones/herramientas técnicas externas al backend viven bajo `infrastructure/`, no bajo `backend/src/Infrastructure/`.
+- El CMS administrativo independiente vive exactamente en `infrastructure/CMS/Directus/` y tiene su propio `package.json`, `package-lock.json`, `.env`, proceso Node, extensions y uploads.
+- Directus no es un Bounded Context ni un módulo NestJS. No se le aplican las capas Domain/Application/Infrastructure/Presentation ni la nomenclatura `{Context}.{Layer}`.
+- Las extensions futuras viven en `infrastructure/CMS/Directus/extensions/`; HU09 no materializa Filter Hooks, endpoints, interfaces, módulos o displays.
+- Directus y el DataSource TypeORM se conectan a una misma base MySQL. Las variables `DB_HOST`, `DB_PORT` y `DB_DATABASE` deben corresponder a `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_DATABASE`.
+- TypeORM Migrations controla la estructura de las tablas de negocio; el Data Model de Directus no se usa para crear o alterar sus columnas, constraints o relaciones.
+- El bootstrap oficial de Directus controla únicamente sus tablas internas `directus_*` y el primer Administrador.
+- Las cuentas y la autenticación administrativas pertenecen a Directus. No crear autenticación administrativa paralela en NestJS o React ni habilitar el registro público.
+- `.env`, `SECRET`, contraseñas y credenciales reales de Directus no se versionan.
+
 ## Contacto, Directus y multimedia
 
 - Flujo futuro de contacto: React → `SubmitContactRequestDto` → Presentation → `SubmitContactRequestCommand` → `CommandBus` → Contact.Application → `Client` + `ContactRequest` → `ContactEmailDto` → `IEmailSenderPort` → adapter SMTP.
@@ -178,7 +190,7 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - Validar Service mediante `Services/public/` y obtener `To` mediante `CompanyProfile/public/`.
 - Separar `From` técnico, `To` administrable y `Reply-To` del Cliente.
 - Directus no participa ni se crea una tabla automáticamente.
-- Directus es provisional y toda afirmación sobre Hostinger requiere la PoC completa.
+- Directus `12.3.0` está incorporado para HU09, continúa provisional y toda afirmación sobre Hostinger requiere la PoC completa.
 - Si se adopta, mutaciones administrativas: Filter Hook → NestJS Command → payload aprobado → escritura final única de Directus.
 - No almacenar archivos como BLOB/base64 del modelo de Domain; storage sigue pendiente.
 

@@ -5,5 +5,5 @@ export type MediaPersistenceDto = {
   type: string;
   displayOrder: number;
   isCover: boolean;
-  coverProjectId: string | null;
+  coverMarker: number | null;
 };

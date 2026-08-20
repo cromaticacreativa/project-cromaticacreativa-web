@@ -52,7 +52,7 @@ Estos elementos explican la historia; no forman parte del árbol activo.
 - [x] Evitar FKs/dependencias técnicas cruzadas entre Bounded Contexts.
 - [x] Configurar TypeORM Migrations y mantener `synchronize: false`.
 - [x] Dividir y revisar migrations iniciales por Portfolio, Services y CompanyProfile.
-- [x] Proteger físicamente la portada única de Project mediante columna generada nullable y `UNIQUE`.
+- [x] Proteger físicamente la portada única de Project mediante `cover_marker` generado nullable y `UNIQUE (project_id, cover_marker)`.
 - [ ] Probar migrations sobre MySQL.
 - [x] Mantener ContactRequest sin tabla ni migration funcional.
 - [x] Modelar `Client` como Entity efímera con identidad interna y componerla dentro de `ContactRequest`.
@@ -92,6 +92,23 @@ Estos elementos explican la historia; no forman parte del árbol activo.
 - [ ] Implementar formulario público y selector de Services.
 - [ ] Cubrir accesibilidad, responsive, carga, vacío y error.
 - [ ] Verificar que React nunca acceda a Directus o MySQL.
+
+## Fase 4.5 — HU09 autenticación local de Directus
+
+- [x] Incorporar Directus `12.3.0` como aplicación Node.js `>=22` independiente en `infrastructure/CMS/Directus/`.
+- [x] Versionar scripts oficiales `directus bootstrap` y `directus start`, `.env.example` seguro, lockfile y directorios reservados de extensions/uploads.
+- [x] Configurar conceptualmente `DB_HOST/DB_PORT/DB_DATABASE` para la misma `MYSQL_HOST/MYSQL_PORT/MYSQL_DATABASE`, sin segunda base.
+- [x] Mantener TypeORM Migrations como autoridad de las diez tablas de negocio y el bootstrap de Directus como autoridad exclusiva de `directus_*`.
+- [x] Mantener autenticación administrativa exclusivamente en Directus, sin AuthModule/JWT/endpoints NestJS y sin login React.
+- [x] No agregar configuración que habilite el registro público y documentar que Directus lo deshabilita por defecto.
+- [x] Preparar recuperación nativa; envío SMTP real no configurado ni verificado.
+- [ ] Ejecutar TypeORM Migrations contra MySQL real. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Ejecutar bootstrap Directus y comprobar sus tablas internas. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Crear y comprobar el Administrador inicial. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Iniciar Data Studio y comprobar login válido. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Comprobar rechazo de contraseña incorrecta y usuario inexistente. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Comprobar en ejecución que el registro público permanezca deshabilitado. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Comprobar introspección de las diez tablas TypeORM sin alterar su esquema. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
 
 ## Fase 5 — PoC de Directus en Hostinger
 

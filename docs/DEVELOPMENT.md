@@ -4,7 +4,7 @@ Esta guía describe el desarrollo sobre la fundación Node.js/NestJS activa.
 
 ## Estado del entorno y transición
 
-El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. El frontend no está implementado. Tampoco existen casos de uso Application, controllers, endpoints o Directus.
+El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. Directus `12.3.0` está incorporado en `infrastructure/CMS/Directus/` como aplicación Node independiente. El frontend no está implementado y tampoco existen casos de uso Application, controllers o endpoints.
 
 La implementación .NET/EF/PostgreSQL anterior fue retirada después de comprobar la equivalencia y solo permanece en Git/ADRs históricas.
 
@@ -137,9 +137,47 @@ Este flujo solo se implementará si Directus supera la PoC:
 
 La autenticación Hook → NestJS sigue pendiente según ADR-023. No elegir API key, JWT, OAuth, mTLS u otra opción sin completar esa decisión.
 
+## Ejecutar Directus localmente — HU09
+
+Directus requiere Node.js `>=22`. NestJS y Directus son procesos independientes, pero deben apuntar a la misma base MySQL.
+
+1. Prepare MySQL y una única base para Cromática Creativa.
+2. Cree `backend/.env` desde `.env.example` de la raíz con `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` y `MYSQL_PASSWORD` reales.
+3. Desde `backend/`, instale y aplique las migrations TypeORM:
+
+   ```powershell
+   cd backend
+   npm ci
+   npm run migration:run
+   ```
+
+4. Verifique que existan `corporate_client`, `project`, `media`, `service`, `category`, `company_profile`, `phone`, `email`, `location`, `social_link` y `typeorm_migration`.
+5. Cree `infrastructure/CMS/Directus/.env` desde su `.env.example`. Use `DB_CLIENT=mysql` y haga coincidir exactamente `DB_HOST/DB_PORT/DB_DATABASE` con `MYSQL_HOST/MYSQL_PORT/MYSQL_DATABASE`. Configure valores locales reales y no versionados para `DB_USER`, `DB_PASSWORD`, `SECRET`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
+6. Instale, inicialice e inicie:
+
+   ```powershell
+   cd infrastructure/CMS/Directus
+   npm ci
+   npm run bootstrap
+   npm run start
+   ```
+
+7. El script `bootstrap` ejecuta el comando oficial `directus bootstrap`: instala/migra exclusivamente las tablas internas y, en la primera inicialización, crea el Administrador con `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
+8. Abra `http://localhost:8055/admin`, pruebe login válido y rechazo de contraseña/correo inválidos.
+9. Confirme que el registro público continúe deshabilitado —es el valor predeterminado— y que no exista flujo público “Crear cuenta” o “Registrarse”.
+10. Confirme que las diez tablas de negocio sean reconocidas por Directus sin recrearlas ni cambiar su estructura desde Data Model.
+
+El reset por correo es nativo de Directus y utiliza `PUBLIC_URL`. Para envío real se requieren `EMAIL_TRANSPORT=smtp`, `EMAIL_FROM` y las variables `EMAIL_SMTP_*` con credenciales reales; mientras no existan, queda **PREPARADO / NO VERIFICADO**. Para desarrollo o emergencia puede usarse el comando oficial:
+
+```powershell
+npx directus users passwd --email <correo> --password <nueva-contraseña>
+```
+
+No se crean tablas `directus_*` con TypeORM ni se modifican tablas de negocio desde Directus.
+
 ## PoC de Directus
 
-La PoC en el **Hostinger Business Web Hosting existente** debe documentar evidencia de:
+HU09 local no equivale a adopción productiva. La PoC posterior en el **Hostinger Business Web Hosting existente** debe documentar evidencia de:
 
 1. Node.js 22;
 2. conexión MySQL;
@@ -211,3 +249,13 @@ npm run build
 ```
 
 Backend ofrece además `migration:show`, `migration:run` y `migration:revert`. Estos scripts compilan primero y usan `dist/src/Infrastructure/Persistence/TypeOrmDataSource.js`; requieren `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` y `MYSQL_PASSWORD`. No se ejecutaron contra una base real en esta corrección.
+
+Desde `infrastructure/CMS/Directus/`:
+
+```powershell
+npm ci
+npm run bootstrap
+npm run start
+```
+
+Bootstrap e inicio requieren la `.env` local y MySQL real; si el entorno no dispone de ellos, deben reportarse como no verificados en lugar de inventar resultados.

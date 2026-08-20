@@ -67,7 +67,7 @@ export class ProjectMapper {
       type: item.type,
       displayOrder: item.order.value,
       isCover: project.coverMediaId?.equals(item.id) ?? false,
-      coverProjectId: null,
+      coverMarker: null,
       project: model,
     }));
     return model;

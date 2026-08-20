@@ -39,3 +39,8 @@ coverage.*
 **/.vite/
 **/.cache/
 *.tsbuildinfo
+
+# Directus local runtime
+infrastructure/CMS/Directus/.env
+infrastructure/CMS/Directus/uploads/*
+!infrastructure/CMS/Directus/uploads/.gitkeep

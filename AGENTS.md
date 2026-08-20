@@ -16,7 +16,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 
 - **Cliente** es el actor público sin cuenta, registro, login, perfil, roles ni permisos persistidos.
 - `Client` es una Entity interna y no persistida de `Contact.Domain`; no representa una cuenta, el actor como identidad persistente ni un `CorporateClient`.
-- **Administrador** es el personal autorizado que usaría el CMS si Directus supera la PoC.
+- **Administrador** es el personal autorizado que se autentica con una cuenta previamente configurada en Directus. La adopción productiva del CMS sigue condicionada a la PoC.
 - `CorporateClient` es un Aggregate Root de `Portfolio`, no el actor Cliente.
 - La V1 no incluye comercio electrónico, pagos, cuentas, autenticación propia, roles propios del backend ni panel administrativo React.
 - Misión, visión, descripción institucional, eslóganes y textos poco cambiantes permanecen en código; no crear `SiteSettings` o `Site` sin requisito.
@@ -113,7 +113,7 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - TypeORM Migrations es la autoridad estructural; prohibido `synchronize: true` en producción.
 - Mantener un único `DataSource` MySQL. Cada módulo registra y consume únicamente sus propios Persistence Models; no crear conexiones por contexto ni FKs entre Bounded Contexts.
 - El único DataSource técnico global vive en `backend/src/Infrastructure/Persistence`; `backend/src/Infrastructure` no es propietario de modelos o migrations de negocio.
-- Mantener UUID como `CHAR(36)` ASCII/binario, tablas singulares `snake_case` y la portada única mediante columna generada nullable `cover_project_id`.
+- Mantener UUID como `CHAR(36)` ASCII/binario, tablas singulares `snake_case` y la portada única mediante `cover_marker`, columna generada nullable independiente de `project_id`, con `UNIQUE (project_id, cover_marker)`.
 - Configurar constraints, índices, cardinalidades y delete behaviors cuando exista el modelo real.
 - Evitar N+1; proyectar lecturas y no reconstruir Aggregates si un DTO basta.
 - TypeORM puede leer estado durante una mutación de Directus, pero no duplica su escritura final.
@@ -130,7 +130,14 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 
 ## Directus y escritor único
 
-- Directus es un candidato provisional para el backoffice, no una capacidad implementada.
+- Directus `12.3.0` está incorporado como aplicación Node independiente en `infrastructure/CMS/Directus/`; no es un Bounded Context, un módulo NestJS ni parte del build del backend.
+- Prohibido ubicar la aplicación CMS en `backend/src/Infrastructure/`, `backend/src/modules/Directus/` o un directorio raíz `cms/`. `backend/src/Infrastructure/` sigue siendo exclusivamente la capa interna del backend.
+- Directus y TypeORM abren conexiones propias hacia exactamente la misma base MySQL: `DB_HOST/DB_PORT/DB_DATABASE` deben corresponder a `MYSQL_HOST/MYSQL_PORT/MYSQL_DATABASE`. No crear una segunda base para el CMS.
+- TypeORM Migrations controla exclusivamente el schema de negocio. No modificar tablas, columnas, constraints o relaciones de negocio desde Directus Data Model.
+- Directus controla exclusivamente sus tablas internas `directus_*` mediante su bootstrap oficial; no crear esas tablas mediante TypeORM.
+- Las cuentas, contraseñas, sesiones, roles y policies administrativas pertenecen exclusivamente a Directus. No crear `AuthModule`, login/JWT/usuarios/roles administrativos en NestJS ni login administrativo en React.
+- Mantener deshabilitado el registro público de Directus. No habilitar “Crear cuenta”, “Registrarse”, `Public Registration` ni registro automático de proveedores externos.
+- El `.env`, `SECRET`, credenciales MySQL, contraseñas administrativas y credenciales SMTP de Directus nunca se versionan.
 - La PoC se ejecutará sobre el **Hostinger Business Web Hosting existente** y cubrirá los 14 criterios de `README.md`, `docs/ARCHITECTURE.md` y `docs/ROADMAP.md`.
 - No afirmar que Directus funciona en Hostinger ni que esa topología tiene soporte oficial.
 - Si la PoC falla, registrar una ADR antes de seleccionar otra solución.
@@ -161,5 +168,5 @@ Estas reglas son obligatorias para todo el repositorio salvo que un `AGENTS.md` 
 - Mantener `docs/ARCHITECTURE.md` como fuente de verdad y la documentación coherente con el estado real.
 - Agregar tests proporcionales cuando exista tooling y mantener Domain libre de I/O/frameworks.
 - NestJS, Domain TypeScript y TypeORM/MySQL tienen una fundación compilable y probada. Todavía no existen frontend, casos de uso Application, controllers de negocio o endpoints.
-- Directus no está implementado. Siguen abiertas su autenticación técnica, el resultado de la PoC, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías y operación.
+- Directus está incorporado/configurado para HU09, pero siguen abiertas su verificación contra MySQL cuando el entorno no esté disponible, la autenticación técnica Hook → NestJS, el resultado de la PoC de Hostinger, storage, correo, antiabuso, historial de ContactRequest, exposición de ProjectPeriod, efecto de desactivar categorías y operación.
 - Registrar toda decisión aprobada en `docs/DECISIONS.md`.
