@@ -88,7 +88,7 @@ test('el endpoint receptor despacha AgregarInformacionDeContactoCommand y devuel
   });
 });
 
-test('el endpoint receptor traduce el rechazo a 422 con la columna de Directus', async () => {
+test('el endpoint receptor traduce el rechazo a 422 con la columna de negocio', async () => {
   const commandBus = {
     execute: async () => {
       throw InformacionDeContactoRechazadaException.campo(

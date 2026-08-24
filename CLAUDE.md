@@ -10,9 +10,9 @@ Antes de realizar cambios, leer y respetar:
 @docs/DEVELOPMENT.md
 @docs/ROADMAP.md
 
-Para trabajos relacionados con Directus:
+Para trabajos relacionados con el CMS (Strapi):
 
-@infrastructure/CMS/Directus/README.md
+@infrastructure/CMS/Strapi/README.md
 
 ## Reglas generales
 

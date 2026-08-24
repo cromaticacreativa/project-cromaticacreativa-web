@@ -73,6 +73,7 @@ test('la configuración MySQL usa un DataSource, diez modelos, tres migrations y
   assert.equal(options.type, 'mysql');
   assert.equal(options.synchronize, false);
   assert.equal(options.migrationsTableName, 'typeorm_migration');
+  // TypeORM Migrations es la única autoridad estructural de las tablas de negocio.
   assert.equal(Array.isArray(options.migrations) ? options.migrations.length : 0, 3);
   const source = new DataSource(options) as DataSource & { buildMetadatas(): Promise<void> };
   await source.buildMetadatas();

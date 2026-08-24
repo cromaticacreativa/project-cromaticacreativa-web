@@ -39,6 +39,10 @@ export function getDatabaseConfiguration(environment: NodeJS.ProcessEnv = proces
       ...servicesPersistenceModels,
       ...companyProfilePersistenceModels,
     ],
+    // TypeORM Migrations es la única autoridad estructural de las tablas de
+    // negocio (crea y evoluciona su schema). Strapi comparte la misma base MySQL
+    // pero solo gobierna sus propias tablas internas; no crea ni altera estas
+    // tablas de negocio. `synchronize` permanece `false`.
     migrations: [
       ...portfolioMigrations,
       ...servicesMigrations,

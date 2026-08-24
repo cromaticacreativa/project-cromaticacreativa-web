@@ -18,10 +18,10 @@ Estos elementos explican la historia; no forman parte del árbol activo.
 - [x] Mantener los Bounded Contexts Portfolio, Services, CompanyProfile y Contact.
 - [x] Aprobar Node.js 22, TypeScript y NestJS como backend objetivo.
 - [x] Aprobar `@nestjs/cqrs` para CommandBus/QueryBus.
-- [x] Aprobar TypeORM/MySQL y migrations como autoridad estructural.
+- [x] Aprobar TypeORM/MySQL y migrations como autoridad estructural de las tablas de negocio (ADR-027).
 - [x] Aprobar React/TypeScript/Vite como frontend objetivo.
 - [x] Definir el Hostinger Business Web Hosting existente como entorno objetivo de evaluación.
-- [x] Mantener Directus provisional y definir su PoC obligatoria.
+- [x] Definir el CMS administrativo (Strapi 5) provisional y su PoC obligatoria; retirar Directus (ADR-025). Base MySQL **única compartida** con ownership separado: TypeORM migrations gobiernan las tablas de negocio; Strapi solo sus tablas internas (ADR-027).
 - [x] Documentar Filter Hook bloqueante y escritor final único como diseño condicionado a la PoC.
 
 ## Fase 1 — Fundación Node.js/NestJS
@@ -91,83 +91,78 @@ Estos elementos explican la historia; no forman parte del árbol activo.
 - [ ] Implementar CompanyProfile.
 - [ ] Implementar formulario público y selector de Services.
 - [ ] Cubrir accesibilidad, responsive, carga, vacío y error.
-- [ ] Verificar que React nunca acceda a Directus o MySQL.
+- [ ] Verificar que React nunca acceda a Strapi o MySQL.
 
-## Fase 4.5 — HU09 autenticación local de Directus
+## Fase 4.5 — CMS administrativo (Strapi)
 
-- [x] Incorporar Directus `12.3.0` como aplicación Node.js `>=22` independiente en `infrastructure/CMS/Directus/`.
-- [x] Versionar scripts oficiales `directus bootstrap` y `directus start`, `.env.example` seguro, lockfile y directorios reservados de extensions/uploads.
-- [x] Configurar conceptualmente `DB_HOST/DB_PORT/DB_DATABASE` para la misma `MYSQL_HOST/MYSQL_PORT/MYSQL_DATABASE`, sin segunda base.
-- [x] Mantener TypeORM Migrations como autoridad de las diez tablas de negocio y el bootstrap de Directus como autoridad exclusiva de `directus_*`.
-- [x] Mantener autenticación administrativa exclusivamente en Directus, sin AuthModule/JWT/endpoints NestJS y sin login React.
-- [x] No agregar configuración que habilite el registro público y documentar que Directus lo deshabilita por defecto.
-- [x] Preparar recuperación nativa; envío SMTP real no configurado ni verificado.
-- [ ] Ejecutar TypeORM Migrations contra MySQL real. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Ejecutar bootstrap Directus y comprobar sus tablas internas. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Crear y comprobar el Administrador inicial. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Iniciar Data Studio y comprobar login válido. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Comprobar rechazo de contraseña incorrecta y usuario inexistente. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Comprobar en ejecución que el registro público permanezca deshabilitado. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
-- [ ] Comprobar introspección de las diez tablas TypeORM sin alterar su esquema. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+> Directus fue retirado definitivamente (ADR-025). Strapi 5 es la plataforma administrativa vigente, sobre una base MySQL **única compartida** con el backend; las TypeORM migrations gobiernan las tablas de negocio y Strapi solo sus tablas internas (ADR-027).
+
+- [x] Retirar Directus del árbol activo (extensions, hooks, branding, seeds, guard, variables y tokens específicos).
+- [x] Incorporar **Strapi 5** (TypeScript) como aplicación Node independiente en `infrastructure/CMS/Strapi/`, con MySQL/MariaDB (sin SQLite).
+- [x] Versionar scripts oficiales (`build`, `develop`, `start`), `tsconfig.json`, `config/*`, `.env.example` seguro y lockfile.
+- [x] Configurar Strapi contra la base MySQL **única compartida** con el backend mediante variables `STRAPI_DB_*` (que apuntan a `MYSQL_*`); sin segunda base (ADR-027).
+- [x] Mantener las TypeORM migrations registradas como autoridad estructural de las tablas de negocio; Strapi gobierna solo sus tablas internas (ADR-027).
+- [x] Mantener autenticación administrativa exclusivamente en Strapi, sin AuthModule/JWT/endpoints NestJS y sin login React.
+- [x] No agregar configuración que habilite el registro público.
+- [x] Verificar `npm install` y `npm run build` de Strapi sin base de datos.
+- [ ] Ejecutar Strapi (`npm run develop`/`start`) contra su base real y crear el primer Administrador. Configurado, pendiente de verificación manual si el entorno no ofrece instancia/credenciales.
+- [ ] Comprobar login válido, rechazo de credenciales inválidas y registro público deshabilitado en ejecución. Pendiente de verificación manual.
+- [x] Descartar los content-types Strapi de negocio (ADR-026 revertida): las tablas de negocio no se modelan como content-types; las gobiernan las TypeORM migrations (ADR-027).
+- [ ] Ejecutar Strapi contra MySQL real y verificar que crea únicamente sus tablas internas sin tocar las de negocio. Pendiente de entorno.
 
 ## Fase 4.6 — HU22 agregar información de contacto
+
+> La lógica de negocio (Commands, Handlers, Strategies, Validadoras, Value Objects, Aggregate y la frontera HTTP interna) permanece **intacta**. Los artefactos específicos de Directus (Filter Hook, `CmsInternalAuthGuard`, extension, UI) fueron **retirados** con la migración a Strapi (ADR-025); la frontera interna quedó sin registrar, pendiente de la integración con Strapi.
 
 - [x] Modelar el caso de uso orientado al negocio `AgregarInformacionDeContactoCommand` con un contrato de entrada abierto (`IEntradaInformacionDeContacto`, sin enum ni unión cerrada de medios), sin handler CMS genérico ni `switch` por colección en Application.
 - [x] Implementar `AgregarInformacionDeContactoCommandHandler` como orquestador (puerto de lectura → validadoras → Value Objects → Aggregate → payload canónico), sin TypeORM ni escritura.
 - [x] Definir el contrato `IValidadora` y `ValidadoraTelefono` con `libphonenumber-js`, canonicalizando a E.164; conservar validez intrínseca en Value Objects y unicidad en el Aggregate.
 - [x] Integrar el correo receptor en `AgregarInformacionDeContactoCommand` mediante `AgregarCorreoReceptorStrategy`; compartir una sola `ValidadoraCorreo` con el correo público y eliminar el Command/Handler de validación paralelo.
 - [x] Crear el puerto de solo lectura `ICompanyProfileStateReader` y su adaptador TypeORM (evidencia de escritor único).
-- [x] Exponer el endpoint interno `POST /internal/cms/company-profile/contact-information` con DTOs y Mapper de Presentation.
-- [x] Resolver ADR-023: token técnico `Bearer` y `CmsInternalAuthGuard` con comparación de tiempo constante y fail closed.
-- [x] Implementar el Filter Hook bloqueante de Directus para `phone`/`email`/`social_link` create (fail closed). El update del correo receptor se intercepta por separado y HU23 incorpora los updates de children; los DELETE no se interceptan conforme a ADR-019.
-- [x] Documentar variables `CMS_INTERNAL_TOKEN`, `BACKEND_INTERNAL_URL`, `BACKEND_INTERNAL_TOKEN` en los `.env.example`.
-- [x] Agregar tests unitarios de teléfono, handler, guard y hook; `npm test` en verde y `npm audit` del backend sin vulnerabilidades.
-- [ ] Verificación E2E real (MySQL + NestJS + Directus) del flujo canónico y fail closed. Pendiente de entorno con instancia/credenciales.
-- [x] HU23 "Modificar información de contacto": un único `ModificarInformacionDeContactoCommand`+Handler orquestador (sin switch) con `ModificarTelefono/Correo/RedSocialStrategy` (mismo OCP y mismas validaciones que Agregar). El Aggregate expone `changePhone/changeEmail/changeSocialLink` (reemplazo por valor, duplicado excluyendo el propio registro); el id→valor se resuelve en Infrastructure (`IChildActualReader`) sin introducir ids en el Domain. Endpoint `/contact-information/modify`, Hook `phone|email|social_link.items.update`, y UI con lápiz de edición. Tests en verde.
-- [x] Alinear ADR-019 y la documentación con la decisión vigente: CREATE/UPDATE pasan por Hook/NestJS y DELETE se ejecuta directamente en Directus, sin endpoints ni casos de uso backend mientras no existan reglas de negocio adicionales.
+- [x] Definir la frontera interna `POST /internal/cms/company-profile/contact-information` con DTOs y Mapper de Presentation (lógica conservada; controller no registrado en esta fase).
+- [~] Autenticación service-to-service: `CmsInternalAuthGuard` (ADR-023) fue retirado con Directus; la protección del CMS (Strapi) → NestJS se rediseñará en la fase de integración (ADR-025).
+- [~] Filter Hook de Directus retirado (ADR-025). El re-registro de la frontera y la integración con Strapi son de una fase posterior.
+- [x] Documentar la variable `CMS_INTERNAL_TOKEN` (neutra, reservada para la futura integración Strapi → NestJS) en `.env.example`; eliminar las variables específicas de Directus.
+- [x] Agregar tests unitarios de teléfono, handler, mapper y controller; `npm test` en verde y `npm audit` del backend sin vulnerabilidades. (Los tests de guard y hook de Directus se eliminaron con Directus.)
+- [ ] Verificación E2E real (MySQL + NestJS + integración Strapi) del flujo canónico. Pendiente de la fase de integración y de entorno con instancia/credenciales.
+- [x] HU23 "Modificar información de contacto": un único `ModificarInformacionDeContactoCommand`+Handler orquestador (sin switch) con `ModificarTelefono/Correo/RedSocialStrategy` (mismo OCP y mismas validaciones que Agregar). El Aggregate expone `changePhone/changeEmail/changeSocialLink` (reemplazo por valor, duplicado excluyendo el propio registro); el id→valor se resuelve en Infrastructure (`IChildActualReader`) sin introducir ids en el Domain. Frontera `/contact-information/modify` (lógica conservada). Tests en verde.
+- [x] Alinear ADR-019/ADR-025 y la documentación con la decisión vigente: las mutaciones de negocio CREATE/UPDATE pasan por NestJS/Application/Domain; el mecanismo concreto de integración con Strapi se definirá en una fase posterior.
 
 ## Fase 4.7 — HU24 agregar ubicación
 
 - [x] Modelar el caso de uso `AgregarUbicacionCommand` orientado al negocio (`direccion`/`latitud`/`longitud`), sin Strategy (flujo único) ni handler CMS genérico.
 - [x] Implementar `AgregarUbicacionCommandHandler` como orquestador: reutiliza `ICompanyProfileStateReader` (solo lectura), rechaza si el perfil no existe o si ya hay ubicación (cardinalidad 0..1, sin sobrescribir), construye `Address`/`GeoCoordinates`/`CompanyLocation` y devuelve el resultado canónico; no persiste.
 - [x] Crear `Exceptions/UbicacionRechazadaException` traduciendo `InvalidValueObjectException`/`InvalidGeoCoordinatesException`; conservar las invariantes en los Value Objects (sin validadoras duplicadas).
-- [x] Exponer el endpoint interno `POST /internal/cms/company-profile/location` con DTOs y `AgregarUbicacionMapper`; el `company_profile_id` procede del Aggregate y se protege del Administrador.
-- [x] Extender la extensión `extensions/company-profile/` con `location.items.create` (ruta explícita, Bearer ADR-023, fail closed), sin crear otra extensión. HU25 incorpora `location.items.update`; DELETE no se intercepta conforme a ADR-019.
+- [x] Definir la frontera interna `POST /internal/cms/company-profile/location` con DTOs y `AgregarUbicacionMapper`; el `company_profile_id` procede del Aggregate y se protege del Administrador (lógica conservada; no registrada en esta fase).
+- [~] La extensión de Directus para `location` fue retirada (ADR-025); la UI del mapa (Leaflet/OpenStreetMap) y la integración se replantearán en la fase de Strapi.
 - [x] No almacenar enlace de Google Maps ni generar UUID para la ubicación; reutilizar la tabla `location` existente sin migration nueva.
-- [x] Agregar tests de `Address` (obligatoria, vacía, mínimo 10, máximo 500 y límites exactos), handler (válido, canónico, dirección trivial, coordenadas fuera de rango, ubicación existente, perfil inexistente, single writer), mapper y hook de ubicación; `npm test` en verde.
-- [ ] Verificación E2E real (MySQL + NestJS + Directus) de la creación de ubicación, rechazo de segunda ubicación y fail closed. Pendiente de entorno con instancia/credenciales.
-- [x] Configuración de UI de Directus con buscador y mapa Leaflet/OpenStreetMap que rellena `latitude`/`longitude`; la dirección permanece manual.
-- [x] HU25 "Modificar ubicación": `ModificarUbicacionCommand`+Handler (flujo único, sin Strategy) que reutiliza `Address`/`GeoCoordinates` y completa los campos ausentes con el estado actual; endpoint `/location/modify`, Hook `location.items.update`, y UI de edición con el mapa centrado en las coordenadas actuales. Tests en verde.
+- [x] Agregar tests de `Address` (obligatoria, vacía, mínimo 10, máximo 500 y límites exactos), handler (válido, canónico, dirección trivial, coordenadas fuera de rango, ubicación existente, perfil inexistente, single writer) y mapper de ubicación; `npm test` en verde. (El test del hook de Directus se eliminó con Directus.)
+- [ ] Verificación E2E real (MySQL + NestJS + integración Strapi) de la creación de ubicación y rechazo de segunda ubicación. Pendiente de la fase de integración y de entorno.
+- [x] HU25 "Modificar ubicación": `ModificarUbicacionCommand`+Handler (flujo único, sin Strategy) que reutiliza `Address`/`GeoCoordinates` y completa los campos ausentes con el estado actual; frontera `/location/modify` (lógica conservada). Tests en verde.
 
-## Fase 5 — PoC de Directus en Hostinger
+## Fase 5 — PoC de Strapi en Hostinger
 
-Directus permanece provisional hasta completar todos los puntos:
+Strapi permanece provisional hasta completar todos los puntos:
 
-- [ ] Verificar ejecución de Node.js 22 en el Hostinger Business Web Hosting existente.
-- [ ] Verificar conexión a MySQL de Hostinger.
-- [ ] Inicializar tablas internas de Directus.
-- [ ] Verificar Data Studio.
-- [ ] Introspeccionar tablas del dominio creadas externamente.
-- [ ] Ejecutar Filter Hooks bloqueantes de CREATE/UPDATE.
-- [ ] Verificar llamada Hook → NestJS.
-- [ ] Verificar aprobación y rechazo de CREATE/UPDATE.
-- [ ] Verificar canonicalización del payload.
-- [ ] Verificar persistencia posterior a aprobación.
-- [ ] Probar ausencia de doble escritura.
+- [ ] Verificar ejecución de Node.js 22 como aplicación Node administrada en el Hostinger Business Web Hosting existente.
+- [ ] Verificar conexión a la base MySQL/MariaDB **única compartida** con el backend.
+- [ ] Inicializar las tablas internas de Strapi (bootstrap) en la base compartida, sin tocar las tablas de negocio.
+- [ ] Verificar el panel de administración.
+- [ ] Verificar autenticación de administradores y roles/permisos.
+- [ ] Verificar `npm run build` y arranque (`npm run start`) en el entorno.
 - [ ] Verificar persistencia y comportamiento de uploads.
-- [ ] Verificar carga de extensions.
-- [ ] Verificar que uploads/extensions sobrevivan reinicio o redeploy.
+- [ ] Verificar que uploads y configuración sobrevivan reinicio o redeploy.
 - [ ] Documentar evidencia, riesgos y límites observados.
-- [ ] Adoptar Directus mediante actualización de ADR-018 o, si falla, reconsiderar CMS en una nueva ADR sin asumir alternativa.
+- [ ] Adoptar Strapi mediante actualización de ADR-025 o, si falla, reconsiderar CMS en una nueva ADR sin asumir alternativa.
 
-## Fase 6 — Integración administrativa, condicionada a PoC
+## Fase 6 — Integración administrativa Strapi → NestJS (fase posterior)
 
-- [x] Completar ADR-023 y definir la autenticación técnica Directus → NestJS (token `Bearer`, resuelto en HU22). La autorización de permisos finos sigue pendiente.
-- [ ] Configurar mínimo privilegio para Administradores.
-- [ ] Implementar endpoints internos sin inventar doble canal de persistencia.
-- [ ] Implementar Filter Hooks para los CREATE/UPDATE de cada operación/colección necesaria; DELETE permanece directo en Directus.
-- [ ] Probar error, aprobación, payload canónico y escritor final único en CREATE/UPDATE, además de autenticación, autorización y confirmación de DELETE en Directus.
-- [ ] Confirmar que TypeORM Migrations siga siendo autoridad estructural.
+- [ ] Definir la autenticación service-to-service CMS (Strapi) → NestJS (candidato: token técnico `Bearer` por ambiente, tiempo constante, fail closed).
+- [ ] Re-registrar la frontera interna `CompanyProfileCmsController` con esa autenticación.
+- [ ] Configurar mínimo privilegio y roles/permisos para Administradores en Strapi.
+- [ ] Implementar la integración/plugin custom de Strapi que invoca los endpoints internos de NestJS, sin inventar doble canal de persistencia.
+- [ ] Probar error, aprobación, payload canónico y ausencia de doble escritura en CREATE/UPDATE; definir el flujo de DELETE.
+- [ ] Confirmar que las TypeORM migrations gobiernan las tablas de negocio (registradas, `synchronize: false`) y que Strapi solo gestiona sus tablas internas sobre la base única compartida.
 - [ ] Definir storage y operación de multimedia.
 - [ ] Probar flujo editorial completo.
 
@@ -185,10 +180,11 @@ Directus permanece provisional hasta completar todos los puntos:
 
 ## Decisiones pendientes
 
-- Resultado y decisión final de la PoC de Directus.
+- Resultado y decisión final de la PoC de Strapi.
+- Integración administrativa custom Strapi → NestJS y su autenticación service-to-service.
 - Estructura física del frontend futuro.
 - Versiones distintas de Node.js 22.
-- Permisos CRUD finos del CMS (la autenticación Directus → NestJS quedó resuelta en ADR-023).
+- Permisos CRUD finos del CMS (Strapi).
 - Rutas, versionado, DTOs y estrategia de errores HTTP.
 - Límites transaccionales y concurrencia.
 - Efecto de desactivar Service/Category sobre Projects históricos.

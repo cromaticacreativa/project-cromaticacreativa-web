@@ -38,7 +38,7 @@ Cada Bounded Context vive bajo `backend/src/modules/{Context}`. Solo se crea `pu
 └── {Context}Module.ts
 ```
 
-- Domain no importa NestJS, TypeORM, MySQL, Directus o HTTP.
+- Domain no importa NestJS, TypeORM, MySQL, el CMS (Strapi) o HTTP.
 - Application depende de Domain.
 - Presentation depende de Application.
 - Infrastructure puede depender de Application y, para mapping justificado, de Domain.
@@ -61,9 +61,9 @@ Los nombres de clases usan sufijos `Command`, `CommandHandler`, `Query`, `QueryH
 ### Commands
 
 - Nombrar por intención, por ejemplo `PublishProjectCommand`.
-- Incluir únicamente datos de entrada; nunca Persistence Models TypeORM, DataSource, adapters o detalles de Directus.
+- Incluir únicamente datos de entrada; nunca Persistence Models TypeORM, DataSource, adapters o detalles del CMS.
 - Pueden coordinar efectos mediante ports.
-- En CREATE y UPDATE administrativos iniciados desde Directus, devuelven error, aprobación o payload canónico y no realizan la escritura final. DELETE no crea Commands mientras no tenga reglas de negocio adicionales.
+- En CREATE y UPDATE administrativos de negocio iniciados desde el CMS, devuelven error, aprobación o payload canónico y no realizan la escritura final. El detalle de la integración con Strapi se definirá en una fase posterior.
 - No crear Commands CRUD por simetría.
 
 ### Queries
@@ -141,14 +141,14 @@ Modelo preservado:
 - Las clases TypeORM usan sufijo `PersistenceModel` y archivos como `ProjectPersistenceModel.ts`; no se denominan simplemente igual que el Aggregate.
 - Los Persistence Models y sus decoradores viven exclusivamente en `Infrastructure/Persistence/Models` del módulo propietario.
 - Usar mappers explícitos Domain ↔ Persistence.
-- TypeORM Migrations controla el esquema; `synchronize: true` está prohibido en producción.
+- Las **TypeORM migrations** son la autoridad estructural de las tablas de negocio y están registradas en el DataSource; `synchronize: true` está prohibido y `synchronize` permanece `false` (ADR-027).
 - Revisar PK, FK internas, `NOT NULL`, `UNIQUE`, checks, índices, cardinalidades y delete behaviors.
 - Usar un único DataSource en `src/Infrastructure/Persistence/TypeOrmDataSource.ts` y una única base MySQL. Cada módulo conserva ownership de Models, Mappers, Configurations y Migrations mediante `TypeOrmModule.forFeature(...)`.
 - UUID: `CHAR(36)` ASCII/binario. Tablas/columnas: singular `snake_case`; constraints: `pk_`, `fk_`, `uq_`, `ck_`, `ix_`.
 - Configuración: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` y `PORT`.
 - No crear FKs ni joins técnicos entre Bounded Contexts sin decisión explícita.
 - `ContactRequest` no recibe tabla por ser Aggregate Root.
-- Directus provisional no altera la estructura del dominio; introspeccionaría tablas creadas externamente.
+- El CMS (Strapi) comparte la misma base MySQL pero gobierna solo sus tablas internas; las TypeORM migrations crean y gobiernan las tablas de negocio (ADR-027).
 
 En CompanyProfile:
 
@@ -166,7 +166,7 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - No replicar las capas hexagonales del backend.
 - Componentes en `PascalCase`; funciones, props y hooks en `camelCase`; hooks personalizados empiezan por `use`.
 - Pages componen UI; services centralizan HTTP; no dispersar `fetch` en componentes.
-- React consume únicamente NestJS REST, nunca Directus o MySQL.
+- React consume únicamente NestJS REST, nunca Strapi o MySQL.
 - Tipar contratos HTTP y estados de carga, vacío, éxito y error.
 - Mantener HTML semántico, accesibilidad y diseño responsive.
 - No elegir librerías adicionales sin requisito y aprobación.
@@ -174,32 +174,31 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 ## Aplicaciones externas de infraestructura
 
 - Las aplicaciones/herramientas técnicas externas al backend viven bajo `infrastructure/`, no bajo `backend/src/Infrastructure/`.
-- El CMS administrativo independiente vive exactamente en `infrastructure/CMS/Directus/` y tiene su propio `package.json`, `package-lock.json`, `.env`, proceso Node, extensions y uploads.
-- Directus no es un Bounded Context ni un módulo NestJS. No se le aplican las capas Domain/Application/Infrastructure/Presentation ni la nomenclatura `{Context}.{Layer}`.
-- Las extensions viven en `infrastructure/CMS/Directus/extensions/` y se organizan por módulo/Bounded Context, no por Historia de Usuario. La extensión estable de CompanyProfile es `extensions/company-profile/` (Filter Hook); implementa los CREATE/UPDATE de negocio correspondientes y nunca intercepta DELETE bajo la decisión vigente. No crear extensions `hu23-*`, `hu24-*`, etc. HU09 no incluía extensions.
-- Directus y el DataSource TypeORM se conectan a una misma base MySQL. Las variables `DB_HOST`, `DB_PORT` y `DB_DATABASE` deben corresponder a `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_DATABASE`.
-- TypeORM Migrations controla la estructura de las tablas de negocio; el Data Model de Directus no se usa para crear o alterar sus columnas, constraints o relaciones.
-- El bootstrap oficial de Directus controla únicamente sus tablas internas `directus_*` y el primer Administrador.
-- Las cuentas y la autenticación administrativas pertenecen a Directus. No crear autenticación administrativa paralela en NestJS o React ni habilitar el registro público.
-- `.env`, `SECRET`, contraseñas y credenciales reales de Directus no se versionan.
+- El CMS administrativo independiente vive exactamente en `infrastructure/CMS/Strapi/` y tiene su propio `package.json`, `package-lock.json`, `.env`, proceso Node y build.
+- Strapi no es un Bounded Context ni un módulo NestJS. No se le aplican las capas Domain/Application/Infrastructure/Presentation ni la nomenclatura `{Context}.{Layer}`.
+- Las personalizaciones del admin (plugins/extensions de Strapi) se organizarán por módulo/Bounded Context, no por Historia de Usuario, cuando se implementen. En esta fase no se crean; la UI custom y la integración Strapi → NestJS son de una fase posterior.
+- Strapi usa la **misma** base MySQL que el backend (ADR-027). Las variables `STRAPI_DB_*` apuntan a la base `MYSQL_*` (por ejemplo `cromatica_prod`). No crear una segunda base. Compartir la conexión no implica ownership: Strapi gobierna solo sus tablas internas.
+- El schema de las tablas de negocio lo controlan las **TypeORM migrations** (registradas); no modelarlas como content-types Strapi ni crear una segunda migración para ellas (ADR-027).
+- El bootstrap de Strapi controla únicamente el schema de sus tablas internas, en la base compartida, además del primer Administrador.
+- Las cuentas y la autenticación administrativas pertenecen a Strapi. No crear autenticación administrativa paralela en NestJS o React ni habilitar el registro público.
+- El `.env` y los secretos de Strapi (`APP_KEYS`, `ADMIN_JWT_SECRET`, `API_TOKEN_SALT`, `TRANSFER_TOKEN_SALT`, `JWT_SECRET`, `ENCRYPTION_KEY`, `STRAPI_DB_*`) no se versionan.
 
-## Contacto, Directus y multimedia
+## Contacto, CMS y multimedia
 
 - Flujo futuro de contacto: React → `SubmitContactRequestDto` → Presentation → `SubmitContactRequestCommand` → `CommandBus` → Contact.Application → `Client` + `ContactRequest` → `ContactEmailDto` → `IEmailSenderPort` → adapter SMTP.
 - Actualmente solo existen el DTO de entrada plano y la fundación Domain; no existen Command, ports, `ContactEmailDto`, adapter ni endpoint.
 - Los futuros ports se denominarán `IServicesReadPort`, `ICompanyProfileReadPort` e `IEmailSenderPort` y solo se materializarán con el caso de uso consumidor.
 - Validar Service mediante `Services/public/` y obtener `To` mediante `CompanyProfile/public/`.
 - Separar `From` técnico, `To` administrable y `Reply-To` del Cliente.
-- Directus no participa ni se crea una tabla automáticamente.
-- Directus `12.3.0` está incorporado para HU09, continúa provisional y toda afirmación sobre Hostinger requiere la PoC completa.
-- Si se adopta, CREATE/UPDATE administrativos: Filter Hook → NestJS Command → payload aprobado → escritura final única de Directus.
-- DELETE administrativo: autenticación/autorización/confirmación en Directus → DELETE directo en MySQL, sin Hook ni NestJS. Si aparece una regla de negocio futura, reevaluar la operación concreta.
+- El CMS (Strapi) no participa en el formulario ni se crea una tabla automáticamente.
+- Strapi 5 está incorporado como CMS administrativo, continúa condicionado a la PoC y toda afirmación sobre Hostinger requiere validarla.
+- Flujo objetivo (mediante la futura infraestructura custom de Strapi): GET y DELETE los resuelve Strapi directo a MySQL; CREATE/UPDATE con negocio van Strapi → NestJS Command → payload canónico → Strapi → escritura final. Las TypeORM migrations gobiernan la estructura; NestJS es la autoridad de reglas de negocio, no un CRUD; el mecanismo concreto se implementará en una fase posterior.
 - No almacenar archivos como BLOB/base64 del modelo de Domain; storage sigue pendiente.
 
 ## Tests y documentación
 
 - Nombrar tests por comportamiento observable cuando se seleccione tooling.
-- Domain tests sin framework web, base, correo, reloj real o Directus.
+- Domain tests sin framework web, base, correo, reloj real o el CMS.
 - Application tests con sustitutos deterministas de ports.
 - Infrastructure integra mappers, TypeORM y MySQL; hooks prueban bloqueo y ausencia de doble escritura.
 - No inventar comandos ni porcentajes de cobertura.
@@ -212,9 +211,9 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 3. Application orquesta Domain y declara ports.
 4. Domain permanece libre de frameworks.
 5. TypeORM Persistence Models viven solo en Infrastructure del módulo propietario y no son Domain Entities.
-6. TypeORM Migrations controla MySQL; no `synchronize: true` en producción.
+6. Las TypeORM migrations gobiernan el schema de las tablas de negocio (registradas); Strapi solo sus tablas internas; `synchronize` permanece `false` (ADR-027).
 7. Los contextos solo consumen `public/` ajeno.
-8. Directus es provisional hasta la PoC.
-9. Directus es el escritor final de CREATE/UPDATE aprobados y ejecuta los DELETE administrativos directamente, sin NestJS.
-10. El formulario no usa Directus ni presupone historial.
+8. Strapi es el CMS administrativo (base MySQL única compartida, dueño solo de sus tablas internas), condicionado a la PoC.
+9. NestJS es la autoridad de reglas de negocio (CREATE/UPDATE via Application/Domain), no un CRUD; la integración administrativa CMS → NestJS se implementará en una fase posterior.
+10. El formulario no usa el CMS ni presupone historial.
 11. No reintroducir la fundación .NET/EF/PostgreSQL retirada sin una decisión explícita.

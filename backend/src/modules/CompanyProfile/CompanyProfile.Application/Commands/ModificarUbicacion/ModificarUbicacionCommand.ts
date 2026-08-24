@@ -1,6 +1,6 @@
 /**
  * Modifica la ubicación existente (HU25). Flujo único (sin Strategy). Los campos
- * son opcionales: un update parcial de Directus puede traer solo los cambiados; el
+ * son opcionales: un update parcial del CMS puede traer solo los cambiados; el
  * Handler completa los ausentes con el valor actual del Aggregate.
  */
 export class ModificarUbicacionCommand {

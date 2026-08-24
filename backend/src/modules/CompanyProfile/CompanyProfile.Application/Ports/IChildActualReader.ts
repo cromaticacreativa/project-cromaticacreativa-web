@@ -3,7 +3,7 @@
  * modificar el elemento correcto sin que el Domain conozca ids (los VOs son por
  * valor). El id se resuelve a su valor único (número/correo/red) en Infrastructure;
  * el Aggregate opera después por valor con `changePhone/changeEmail/changeSocialLink`.
- * Es solo lectura: la escritura final la hace Directus.
+ * Es solo lectura: la escritura final la hace el CMS externo.
  */
 export interface IChildActualReader {
   leerTelefonoActual(id: string): Promise<string | null>;

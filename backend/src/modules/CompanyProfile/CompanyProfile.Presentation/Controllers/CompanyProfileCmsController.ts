@@ -6,10 +6,8 @@ import {
   HttpException,
   Post,
   UnprocessableEntityException,
-  UseGuards,
 } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
-import { CmsInternalAuthGuard } from '../../../../Infrastructure/Security/CmsInternalAuthGuard';
 import {
   IResultadoCorreoReceptor,
   IResultadoInformacionDeContactoOrdenado,
@@ -37,10 +35,10 @@ import { ModificarUbicacionRequestDto } from '../DTOs/ModificarUbicacionRequestD
 import { IResultadoInformacionDeContacto } from '../../CompanyProfile.Application/Ports/IResultadoInformacionDeContacto';
 
 /**
- * Traduce el vocabulario del caso de uso al nombre de columna que Directus usa
- * en cada formulario. Presentation es la única capa que conoce esas columnas; el
- * `field` viaja en `errors[].extensions.field` para que Directus pueda asociar el
- * error al campo correspondiente.
+ * Traduce el vocabulario del caso de uso al nombre de columna de negocio que
+ * expone cada formulario administrativo del CMS. Presentation es la única capa
+ * que conoce esas columnas; el `field` viaja en `errors[]` para que el CMS pueda
+ * asociar el error al campo correspondiente.
  */
 const CAMPO_A_COLUMNA: Record<string, string> = {
   numero: 'number',
@@ -62,10 +60,12 @@ type RechazoDeNegocio = InformacionDeContactoRechazadaException | UbicacionRecha
 /**
  * Frontera interna administrativa de CompanyProfile bajo `/internal/cms/company-profile`.
  *
- * La invoca el Filter Hook de Directus tras autenticarse con el token técnico
- * (ADR-023). El controller autentica (Guard), mapea el DTO a un Command, despacha
- * por `CommandBus` y devuelve el payload canónico. No contiene reglas de negocio,
- * validación, TypeORM ni reconstrucción del Aggregate.
+ * Recibe operaciones administrativas de negocio (CREATE / UPDATE) delegadas por el
+ * CMS: mapea el DTO a un Command, despacha por `CommandBus`, valida y canonicaliza
+ * las reglas de negocio y devuelve el payload canónico al CMS. NestJS es la
+ * autoridad de reglas de negocio, pero **no** ejecuta la escritura administrativa
+ * final: en una fase posterior Strapi realizará esa escritura con el payload
+ * devuelto. El schema de las tablas de negocio lo gobiernan las TypeORM migrations.
  *
  * Un rechazo de negocio se traduce a una respuesta HTTP estructurada:
  * `{ statusCode, message, errors: [{ field, message }] }`, con status 409 para un
@@ -75,9 +75,13 @@ type RechazoDeNegocio = InformacionDeContactoRechazadaException | UbicacionRecha
  * - `contact-information` (HU22): agrega teléfono, correo o red social.
  * - `location` (HU24): agrega la ubicación de la empresa.
  * - `contact-request-recipient-email`: cambia el correo receptor del Aggregate.
+ *
+ * NOTA DE MIGRACIÓN: este controller no está registrado en `CompanyProfileModule`
+ * en esta fase. La integración administrativa pasó de Directus a Strapi; la
+ * autenticación service-to-service Strapi → NestJS y el re-registro de esta
+ * frontera se implementarán en una tarea posterior. No se expone sin protección.
  */
 @Controller('internal/cms/company-profile')
-@UseGuards(CmsInternalAuthGuard)
 export class CompanyProfileCmsController {
   public constructor(private readonly commandBus: CommandBus) {}
 
@@ -159,7 +163,7 @@ export class CompanyProfileCmsController {
 
   /**
    * Procesa el cambio del correo receptor mediante el mismo caso de uso y
-   * Aggregate de la información de contacto. Directus conserva la escritura final.
+   * Aggregate de la información de contacto. El CMS conserva la escritura final.
    */
   @Post('contact-request-recipient-email')
   @HttpCode(200)
@@ -183,7 +187,7 @@ export class CompanyProfileCmsController {
   /**
    * Construye la respuesta HTTP segura del rechazo de negocio: 409 si es un
    * conflicto de estado, 422 si es validación de entrada. El cuerpo incluye
-   * `errors[]` con el `field` traducido a la columna de Directus.
+   * `errors[]` con el `field` traducido a la columna de negocio.
    */
   private aHttp(
     rechazo: RechazoDeNegocio,
