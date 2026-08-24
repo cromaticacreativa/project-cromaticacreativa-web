@@ -1,38 +1,17 @@
-const { spawn } = require('node:child_process');
+'use strict';
+
 const path = require('node:path');
+const { createStrapi } = require('@strapi/strapi');
 
-const strapiBin = path.join(
-  __dirname,
-  'node_modules',
-  '@strapi',
-  'strapi',
-  'bin',
-  'strapi.js',
-);
+async function main() {
+  const strapi = await createStrapi({
+    distDir: path.resolve(__dirname, 'dist'),
+  });
 
-const child = spawn(
-  process.execPath,
-  [strapiBin, 'start'],
-  {
-    stdio: 'inherit',
-    env: process.env,
-  },
-);
+  await strapi.start();
+}
 
-const shutdown = (signal) => {
-  if (!child.killed) {
-    child.kill(signal);
-  }
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-
-child.on('exit', (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-
-  process.exit(code ?? 1);
+main().catch((error) => {
+  console.error('Error starting Strapi:', error);
+  process.exit(1);
 });
