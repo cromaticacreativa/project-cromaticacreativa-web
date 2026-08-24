@@ -4,7 +4,7 @@ import { ModificarUbicacionRequestDto } from '../DTOs/ModificarUbicacionRequestD
 import { AgregarUbicacionResponseDto } from '../DTOs/AgregarUbicacionResponseDto';
 
 /**
- * Traduce el update parcial de `location` de Directus al Command de HU25 y el
+ * Traduce el update parcial de `location` del CMS al Command de HU25 y el
  * resultado canónico de vuelta. Solo se incluyen en el Command los campos
  * presentes en el payload; el Handler completa los ausentes con el valor actual.
  * La respuesta de update no incluye `company_profile_id` (no cambia).

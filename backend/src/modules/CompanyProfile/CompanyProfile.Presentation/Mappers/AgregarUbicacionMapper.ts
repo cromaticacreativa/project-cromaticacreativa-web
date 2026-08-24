@@ -3,13 +3,13 @@ import { IResultadoUbicacion } from '../../CompanyProfile.Application/Ports/IRes
 import { AgregarUbicacionRequestDto } from '../DTOs/AgregarUbicacionRequestDto';
 import { AgregarUbicacionResponseDto } from '../DTOs/AgregarUbicacionResponseDto';
 
-/** Colección de Directus que HU24 intercepta para creación. */
+/** Colección (tabla de negocio) que HU24 crea desde el CMS administrativo. */
 export const COLECCION_UBICACION = 'location';
 
 /**
- * Traduce la frontera técnica de Directus (payload de `location`) hacia el
+ * Traduce la frontera técnica del CMS (payload de `location`) hacia el
  * vocabulario del caso de uso y traduce el resultado canónico de vuelta al
- * payload técnico que Directus persiste.
+ * payload técnico que el CMS persiste.
  *
  * Presentation es la única capa que conoce los nombres de columna (`address`,
  * `latitude`, `longitude`, `company_profile_id`); Application usa `direccion`,

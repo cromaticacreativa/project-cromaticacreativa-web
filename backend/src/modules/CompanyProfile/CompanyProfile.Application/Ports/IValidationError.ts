@@ -5,8 +5,8 @@
  * abortar en el primero.
  *
  * `field` usa el vocabulario del caso de uso (`numero`, `correo`, `red`, `url`,
- * `direccion`, `latitud`, `longitud`). La traducción de ese nombre al campo
- * técnico de Directus (`number`, `address`, `network`, `latitude`, ...) es
+ * `direccion`, `latitud`, `longitud`). La traducción de ese nombre a la columna
+ * de negocio (`number`, `address`, `network`, `latitude`, ...) es
  * responsabilidad de Presentation, no de Application ni de Domain.
  */
 export interface IValidationError {

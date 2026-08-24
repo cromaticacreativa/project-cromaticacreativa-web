@@ -12,7 +12,7 @@ function controller(execute: () => Promise<unknown>): CompanyProfileCmsControlle
   return new CompanyProfileCmsController(commandBus);
 }
 
-test('traduce un rechazo de validación de contacto a 422 con errors[] y columna de Directus', async () => {
+test('traduce un rechazo de validación de contacto a 422 con errors[] y columna de negocio', async () => {
   const sut = controller(async () => {
     throw InformacionDeContactoRechazadaException.campo('numero', "El número de teléfono debe incluir el código de país comenzando con '+'.");
   });
@@ -45,7 +45,7 @@ test('traduce un conflicto (duplicado) de contacto a HTTP 409', async () => {
   );
 });
 
-test('traduce un rechazo de ubicación con múltiples errores a 422 con columnas de Directus', async () => {
+test('traduce un rechazo de ubicación con múltiples errores a 422 con columnas de negocio', async () => {
   const sut = controller(async () => {
     throw UbicacionRechazadaException.acumulada([
       { field: 'direccion', message: 'La dirección no puede estar vacía.' },

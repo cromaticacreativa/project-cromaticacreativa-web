@@ -155,7 +155,7 @@ test('el caso de uso de ubicación no dispone de ningún puerto de escritura (es
   for (const source of fuentes) assert.doesNotMatch(source, escrituras);
 });
 
-test('el Mapper traduce el payload de Directus a AgregarUbicacionCommand', () => {
+test('el Mapper traduce el payload del CMS a AgregarUbicacionCommand', () => {
   const command = AgregarUbicacionMapper.toCommand({
     collection: 'location',
     payload: { address: '  Av. Principal, Caracas  ', latitude: 10.4806, longitude: -66.9036, company_profile_id: 'ignorado' },
@@ -165,7 +165,7 @@ test('el Mapper traduce el payload de Directus a AgregarUbicacionCommand', () =>
   assert.equal(command.longitud, -66.9036);
 });
 
-test('el Mapper traduce el resultado canónico al payload de Directus con el id del backend', () => {
+test('el Mapper traduce el resultado canónico al payload del CMS con el id del backend', () => {
   const respuesta = AgregarUbicacionMapper.toResponse({
     companyProfileId: PROFILE_ID,
     direccion: 'Av. Principal, Caracas, Venezuela',

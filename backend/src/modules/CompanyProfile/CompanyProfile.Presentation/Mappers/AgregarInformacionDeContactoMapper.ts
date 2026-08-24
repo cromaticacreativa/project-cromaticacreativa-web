@@ -8,20 +8,20 @@ import { TIPO_TELEFONO } from '../../CompanyProfile.Application/Strategies/Agreg
 import { AgregarInformacionDeContactoRequestDto } from '../DTOs/AgregarInformacionDeContactoRequestDto';
 import { AgregarInformacionDeContactoResponseDto } from '../DTOs/AgregarInformacionDeContactoResponseDto';
 
-/** Colecciones de Directus que HU22 intercepta para creación. */
+/** Colecciones (tablas de negocio) que HU22 crea desde el CMS administrativo. */
 export const COLECCION_TELEFONO = 'phone';
 export const COLECCION_CORREO = 'email';
 export const COLECCION_RED_SOCIAL = 'social_link';
 
 /**
- * Traduce la frontera técnica de Directus (colección + payload) hacia la entrada
+ * Traduce la frontera técnica del CMS (colección + payload) hacia la entrada
  * abierta del caso de uso y traduce el resultado canónico de vuelta al payload
- * técnico de Directus.
+ * técnico que el CMS persistirá.
  *
  * Presentation es la única capa que conoce las colecciones y los nombres de
- * columna de Directus; Application usa el lenguaje del caso de uso. Un medio
- * nuevo que llegue mediante una colección/forma nueva de Directus se soporta
- * extendiendo esta traducción de frontera, sin acoplar Application a Directus.
+ * columna de negocio; Application usa el lenguaje del caso de uso. Un medio
+ * nuevo que llegue mediante una colección/forma nueva del CMS se soporta
+ * extendiendo esta traducción de frontera, sin acoplar Application al CMS.
  * El Mapper no contiene reglas de negocio ni valida planes telefónicos.
  */
 export class AgregarInformacionDeContactoMapper {
@@ -76,7 +76,7 @@ export class AgregarInformacionDeContactoMapper {
         };
       default:
         throw new BadRequestException(
-          `El resultado de tipo '${resultado.tipo}' no tiene traducción de frontera en Directus.`,
+          `El resultado de tipo '${resultado.tipo}' no tiene traducción de frontera para el CMS.`,
         );
     }
   }

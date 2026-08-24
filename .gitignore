@@ -40,7 +40,12 @@ coverage.*
 **/.cache/
 *.tsbuildinfo
 
-# Directus local runtime
-infrastructure/CMS/Directus/.env
-infrastructure/CMS/Directus/uploads/*
-!infrastructure/CMS/Directus/uploads/.gitkeep
+# Strapi CMS local runtime (Strapi tiene además su propio .gitignore anidado)
+infrastructure/CMS/Strapi/.env
+infrastructure/CMS/Strapi/.tmp/
+infrastructure/CMS/Strapi/.strapi/
+infrastructure/CMS/Strapi/.cache/
+infrastructure/CMS/Strapi/build/
+infrastructure/CMS/Strapi/dist/
+infrastructure/CMS/Strapi/public/uploads/*
+!infrastructure/CMS/Strapi/public/uploads/.gitkeep

@@ -17,7 +17,7 @@ import { SocialLinkPersistenceModel } from '../Persistence/Models/SocialLinkPers
  *
  * Implementa exclusivamente lectura (`findOne`). No expone ni ejecuta `save`,
  * `insert`, `update` o `delete`: la escritura final de una mutación administrativa
- * pertenece únicamente a Directus.
+ * pertenece únicamente al CMS externo.
  */
 export class CompanyProfileStateReader implements ICompanyProfileStateReader, IChildActualReader {
   public constructor(

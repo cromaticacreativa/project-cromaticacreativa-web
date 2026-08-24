@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CmsInternalAuthGuard } from '../../Infrastructure/Security/CmsInternalAuthGuard';
 import { AgregarInformacionDeContactoCommandHandler } from './CompanyProfile.Application/Commands/AgregarInformacionDeContacto/AgregarInformacionDeContactoCommandHandler';
 import { AgregarUbicacionCommandHandler } from './CompanyProfile.Application/Commands/AgregarUbicacion/AgregarUbicacionCommandHandler';
 import { ModificarInformacionDeContactoCommandHandler } from './CompanyProfile.Application/Commands/ModificarInformacionDeContacto/ModificarInformacionDeContactoCommandHandler';
@@ -21,13 +20,22 @@ import { ValidadoraCorreo } from './CompanyProfile.Application/Validations/Valid
 import { ValidadoraRedSocial } from './CompanyProfile.Application/Validations/ValidadoraRedSocial';
 import { companyProfilePersistenceModels } from './CompanyProfile.Infrastructure/Persistence/Configurations/CompanyProfilePersistenceConfiguration';
 import { CompanyProfileStateReader } from './CompanyProfile.Infrastructure/Adapters/CompanyProfileStateReader';
-import { CompanyProfileCmsController } from './CompanyProfile.Presentation/Controllers/CompanyProfileCmsController';
 
+/**
+ * Módulo de CompanyProfile.
+ *
+ * La lógica de negocio administrativa (Commands, Handlers, Strategies,
+ * Validadoras y el puerto de lectura) permanece registrada y compilable. La
+ * frontera HTTP interna `CompanyProfileCmsController` NO se registra en esta
+ * fase: la integración administrativa migró de Directus a Strapi y la
+ * autenticación service-to-service Strapi → NestJS se implementará en una tarea
+ * posterior. Hasta entonces el controller no se expone sin protección. El
+ * archivo del controller se conserva como código de migración desacoplado del
+ * CMS anterior.
+ */
 @Module({
   imports: [TypeOrmModule.forFeature(companyProfilePersistenceModels)],
-  controllers: [CompanyProfileCmsController],
   providers: [
-    CmsInternalAuthGuard,
     ValidadoraTelefono,
     ValidadoraCorreo,
     ValidadoraRedSocial,
