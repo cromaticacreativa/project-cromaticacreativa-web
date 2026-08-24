@@ -117,7 +117,7 @@ function profileModel(): CompanyProfilePersistenceModel {
       }),
     ],
     location: Object.assign(new LocationPersistenceModel(), {
-      companyProfileId: uuid(1), address: 'A', latitude: 10, longitude: -20,
+      companyProfileId: uuid(1), address: 'Dirección inicial', latitude: 10, longitude: -20,
     }),
     socialLinks: [Object.assign(new SocialLinkPersistenceModel(), {
       id: uuid(6), companyProfileId: uuid(1), network: 'WhatsApp',
@@ -132,7 +132,7 @@ test('CompanyProfileMapper restaura colecciones ordenadas, recipient, WhatsApp y
   assert.deepEqual(profile.emails.map((email) => email.value), ['second@example.com', 'first@example.com']);
   assert.equal(profile.contactRequestRecipientEmail.value, 'recipient@example.com');
   assert.equal(profile.socialLinks[0]?.network, 'WhatsApp');
-  assert.equal(profile.location?.address.value, 'A');
+  assert.equal(profile.location?.address.value, 'Dirección inicial');
   assert.equal(profile.location?.coordinates.longitude, -20);
   assert.equal('id' in profile.location!, false);
 });
@@ -140,7 +140,7 @@ test('CompanyProfileMapper restaura colecciones ordenadas, recipient, WhatsApp y
 test('CompanyProfileMapper rechaza recipient y colecciones persistidas inválidas', () => {
   const invalidRecipient = profileModel();
   invalidRecipient.contactRequestRecipientEmail = '';
-  assert.throws(() => CompanyProfileMapper.toDomain(invalidRecipient), /correo electrónico no es válida/);
+  assert.throws(() => CompanyProfileMapper.toDomain(invalidRecipient), /correo electrónico no puede estar vacío/);
 
   const duplicatePhone = profileModel();
   duplicatePhone.phones.push(Object.assign(new PhonePersistenceModel(), {
@@ -163,9 +163,9 @@ test('CompanyProfileMapper rechaza recipient y colecciones persistidas inválida
 
   const invalidLocation = profileModel();
   invalidLocation.location = Object.assign(new LocationPersistenceModel(), {
-    companyProfileId: uuid(1), address: 'A', latitude: 91, longitude: 0,
+    companyProfileId: uuid(1), address: 'Dirección inválida por latitud', latitude: 91, longitude: 0,
   });
-  assert.throws(() => CompanyProfileMapper.toDomain(invalidLocation), /rangos válidos/);
+  assert.throws(() => CompanyProfileMapper.toDomain(invalidLocation), /latitud debe estar entre/);
 
   const invalidOrder = profileModel();
   invalidOrder.phones[0]!.displayOrder = -1;
@@ -182,7 +182,7 @@ test('CompanyProfileMapper persiste colecciones y conserva IDs técnicos por val
   profile.addEmail(new EmailAddress('new@example.com'));
   profile.addSocialLink(new SocialLink('whatsapp', new ExternalUrl('https://wa.me/new')));
   profile.addSocialLink(new SocialLink('Instagram', new ExternalUrl('https://example.com/instagram')));
-  profile.setLocation(new CompanyLocation(new Address('B'), new GeoCoordinates(11, -21)));
+  profile.setLocation(new CompanyLocation(new Address('Dirección actualizada'), new GeoCoordinates(11, -21)));
 
   const mapped = CompanyProfileMapper.toPersistence(profile, existing);
   assert.equal(mapped.phones[0]?.id, uuid(2));

@@ -66,6 +66,39 @@ export class CompanyContactInformation {
     return true;
   }
 
+  /**
+   * Reemplaza un teléfono existente (identificado por su valor actual) por uno
+   * nuevo. La unicidad se evalúa excluyendo el propio registro, de modo que
+   * guardar sin cambios no se considera duplicado. `no-encontrado` indica que el
+   * valor actual no está en la colección (estado inconsistente).
+   */
+  public changePhone(actual: PhoneNumber, nuevo: PhoneNumber): ResultadoCambio {
+    const index = this.phoneItems.findIndex((item) => item.equals(actual));
+    if (index < 0) return 'no-encontrado';
+    if (this.phoneItems.some((item, k) => k !== index && item.equals(nuevo))) return 'duplicado';
+    this.phoneItems[index] = nuevo;
+    return 'ok';
+  }
+
+  public changeEmail(actual: EmailAddress, nuevo: EmailAddress): ResultadoCambio {
+    const index = this.emailItems.findIndex((item) => item.equals(actual));
+    if (index < 0) return 'no-encontrado';
+    if (this.emailItems.some((item, k) => k !== index && item.equals(nuevo))) return 'duplicado';
+    this.emailItems[index] = nuevo;
+    return 'ok';
+  }
+
+  public changeSocialLink(actual: SocialLink, nuevo: SocialLink): ResultadoCambio {
+    const index = this.socialLinkItems.findIndex((item) => item.hasSameNetwork(actual));
+    if (index < 0) return 'no-encontrado';
+    if (this.socialLinkItems.some((item, k) => k !== index && item.hasSameNetwork(nuevo))) return 'duplicado';
+    this.socialLinkItems[index] = nuevo;
+    return 'ok';
+  }
+
   public setLocation(location: CompanyLocation): void { this._location = location; }
   public removeLocation(): void { this._location = null; }
 }
+
+/** Resultado de reemplazar un elemento existente por valor dentro del Aggregate. */
+export type ResultadoCambio = 'ok' | 'no-encontrado' | 'duplicado';

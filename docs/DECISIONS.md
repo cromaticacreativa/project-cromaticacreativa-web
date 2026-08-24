@@ -211,6 +211,8 @@ Las mutaciones iniciadas en Directus deben respetar casos de uso, reglas e invar
 
 Interceptar cada create, update o delete de datos del dominio mediante un Filter Hook bloqueante antes de que Directus persista. El Hook llamará a un endpoint interno de ASP.NET Core; Presentation despachará un Command con MediatR; Application orquestará Domain para autorizar, rechazar o transformar la operación. El Hook cancelará una operación rechazada o devolverá el payload canónico aprobado, y Directus ejecutará el único `INSERT`, `UPDATE` o `DELETE` final.
 
+> Alcance histórico: esta decisión fue reemplazada por ADR-019. Su inclusión de DELETE se conserva para explicar la evolución; la arquitectura vigente limita el recorrido Hook → NestJS a CREATE/UPDATE y establece DELETE directo en Directus.
+
 ASP.NET Core podrá consultar estado actual con EF Core para reconstruir un Aggregate o evaluar reglas, pero no ejecutará `Add`, `Update`, `Remove` o `SaveChanges` como persistencia final de esa misma mutación.
 
 ### Consecuencias
@@ -431,16 +433,20 @@ Como evidencia estructural de HU09, Directus `12.3.0` está incorporado en `infr
 
 ### Contexto
 
-Las mutaciones administrativas deben atravesar Application y Domain sin que NestJS y el CMS persistan dos veces la misma operación.
+La formulación inicial de esta ADR agrupaba CREATE, UPDATE y DELETE como mutaciones que debían atravesar Application y Domain, evitando que NestJS y el CMS persistieran dos veces la misma operación. La implementación posterior confirmó que CREATE y UPDATE sí requieren validación y canonicalización de negocio, mientras que los DELETE actuales no incorporan reglas o invariantes adicionales que justifiquen un caso de uso backend.
 
 ### Decisión
 
-Si Directus supera la PoC, cada mutación administrativa se interceptará antes de persistir mediante un Filter Hook bloqueante. El Hook llamará a un endpoint interno NestJS, que despachará un Command con `CommandBus`. Application podrá leer estado mediante un port TypeORM, invocará Domain y devolverá error, aprobación o payload canónico. Directus realizará el único `INSERT`, `UPDATE` o `DELETE` final.
+Si Directus supera la PoC, cada CREATE y UPDATE administrativo de datos de negocio se interceptará antes de persistir mediante un Filter Hook bloqueante. El Hook llamará a un endpoint interno NestJS, que despachará un Command con `CommandBus`. Application podrá leer estado mediante un port TypeORM, invocará Domain y devolverá error, aprobación o payload canónico. Directus realizará el único `INSERT` o `UPDATE` final.
+
+Todos los DELETE administrativos se ejecutarán directamente mediante Directus y no pasarán por Filter Hooks, NestJS, Application o Domain. Directus será responsable de la autenticación, la autorización y la confirmación administrativa, además de ejecutar el `DELETE` sobre MySQL. Esta delimitación reemplaza explícitamente el alcance absoluto original de ADR-019 para DELETE, sin alterar la obligación de que CREATE y UPDATE atraviesen el backend. Si una eliminación incorpora una regla de negocio o invariante en el futuro, se reevaluará el flujo de esa operación concreta.
 
 ### Consecuencias
 
-- El Command administrativo no ejecuta la persistencia final de esa misma mutación.
-- Deben probarse bloqueo, rechazo, aprobación, canonicalización y ausencia de doble escritura.
+- Los Commands administrativos de CREATE y UPDATE no ejecutan la persistencia final de esa misma operación.
+- Deben probarse bloqueo, rechazo, aprobación, canonicalización y ausencia de doble escritura para CREATE y UPDATE.
+- DELETE no requiere endpoint, Command, Handler, Strategy ni validación backend mientras conserve el alcance actual sin reglas de negocio adicionales.
+- Los permisos y la confirmación de las eliminaciones pertenecen a Directus.
 - Las lecturas administrativas ordinarias no requieren NestJS.
 - Si ADR-018 no se valida, este mecanismo deberá revisarse junto con la futura decisión de CMS.
 
@@ -537,24 +543,52 @@ En MySQL, `company_profile` contiene `contact_request_recipient_email`. Las tabl
 
 ## ADR-023 — Autenticación técnica Directus → NestJS
 
-**Estado:** Pendiente
+**Estado:** Aceptada
 
 ### Contexto
 
-Si Directus supera la PoC de ADR-018, sus Filter Hooks bloqueantes deberán llamar endpoints internos NestJS para procesar mutaciones administrativas conforme a ADR-019. Esa comunicación técnica necesitará autenticación y autorización antes de producción.
+HU22 materializa el primer Filter Hook bloqueante (ADR-019): al crear `phone`, `email` o `social_link`, Directus llama a un endpoint interno NestJS (`/internal/cms/*`) que valida y canonicaliza la mutación. Esa llamada máquina-a-máquina necesita autenticación antes de exponerse. Es distinta de HU09, que resuelve la autenticación humana Administrador → Directus (email/contraseña, sesión nativa de Directus).
 
 ### Decisión
 
-Todavía no se selecciona un mecanismo. Esta ADR no adopta API key, JWT, OAuth, mTLS, Basic Auth, sesiones ni proveedor alguno.
+Para la V1 se adopta un **token técnico estático, criptográficamente aleatorio y dedicado**, enviado como `Authorization: Bearer <token>` en cada llamada del Hook al backend. No se adopta API key por query string, JWT de personas, OAuth, mTLS, Basic Auth ni la sesión/credenciales del Administrador, la `SECRET` de Directus o la contraseña de MySQL.
 
-La decisión se completará únicamente después de superar la PoC de Directus, conocer las restricciones reales del Hostinger Business Web Hosting existente y definir amenazas y requisitos operativos verificables.
+- El backend lee el secreto de `CMS_INTERNAL_TOKEN`; Directus lo envía desde `BACKEND_INTERNAL_TOKEN`. Ambos deben coincidir y nunca se versionan.
+- `CmsInternalAuthGuard` protege `/internal/cms/*`: exige el esquema `Bearer`, compara el token con `node:crypto.timingSafeEqual` previa verificación de longitud y nunca registra su valor.
+- Es **fail closed**: si `CMS_INTERNAL_TOKEN` no está configurado, el endpoint interno rechaza toda solicitud; si faltan `BACKEND_INTERNAL_URL`/`BACKEND_INTERNAL_TOKEN`, el Hook cancela la creación sin contactar al backend.
+- El token es distinto por ambiente (local y producción usan valores diferentes) y se rota manualmente (generar, actualizar backend y Directus, reiniciar, verificar, retirar el anterior).
 
 ### Consecuencias
 
-- Ningún endpoint administrativo interno se considera listo para producción mientras esta ADR permanezca pendiente.
-- No se hardcodearán secretos en código, configuración versionada, hooks ni contratos.
-- El mecanismo futuro deberá admitir rotación de credenciales y mínimo privilegio.
-- Si Directus no se adopta, esta ADR deja de ser necesaria junto con esa integración.
+- La comunicación Directus → NestJS de HU22 queda autenticada sin introducir usuarios, roles ni JWT de personas en NestJS.
+- Los secretos viven solo en el entorno (`.env`/variables de deployment); los `.env.example` documentan las variables con placeholders.
+- El mecanismo es revisable: una arquitectura futura (por ejemplo, tras la PoC de Hostinger o nuevos requisitos de amenazas) podría reemplazar el token por otra estrategia mediante una nueva ADR, conservando mínimo privilegio y rotación.
+- No habilita permisos CRUD finos ni resuelve la operación productiva de Directus, que siguen abiertos junto con la PoC (ADR-018).
+
+## ADR-024 — Caso de uso administrativo orientado al negocio y validación telefónica internacional (HU22)
+
+**Estado:** Aceptada
+
+### Contexto
+
+HU22 "Agregar información de contacto" es la primera mutación administrativa real. Debía evitarse un caso de uso técnico genérico (un `ValidateCmsMutationCommand` con un `switch` por colección de Directus) que hablara el lenguaje del CMS en lugar del negocio. Además, el criterio del ERS de registrar teléfonos exige validar números reales contra planes de numeración, algo que ni el Value Object `PhoneNumber` (solo texto no vacío) ni una tabla de prefijos codificada a mano deben resolver.
+
+### Decisión
+
+- Application expone el caso de uso `AgregarInformacionDeContactoCommand` con un contrato de entrada **abierto** `IEntradaInformacionDeContacto` (`Ports/`), compuesto por un `tipo: string` y `datos` en lenguaje del caso de uso. No existe un enum ni una unión cerrada que enumere los medios: cada `Strategy` es propietaria de su propio identificador de tipo y del narrowing de sus `datos`. `IResultadoInformacionDeContacto` es la base común; los medios públicos usan `IResultadoInformacionDeContactoOrdenado` con `displayOrder` requerido y el correo receptor usa `IResultadoCorreoReceptor` sin orden ni id de perfil. El `switch` por colección de Directus vive solo en el Mapper de Presentation de las colecciones públicas.
+- El `AgregarInformacionDeContactoCommandHandler` orquesta: lee el estado vigente una sola vez mediante `ICompanyProfileStateReader` y resuelve polimórficamente una estrategia compatible. No contiene `switch`/`if` por tipo ni importa `EmailAddress`; `AgregarTelefonoStrategy`, `AgregarCorreoStrategy`, `AgregarCorreoReceptorStrategy` y `AgregarRedSocialStrategy` usan el Aggregate `CompanyContactInformation`. El correo receptor llama a `changeContactRequestRecipientEmail(...)` y devuelve el valor canónico; Directus conserva la escritura final.
+- Las validaciones de Application implementan `IValidadora<TEntrada, TResultado>`. `ValidadoraCorreo` es la única traducción de `InvalidValueObjectException.reason` para correo público y receptor, y reutiliza `EmailAddress` sin copiar regex ni invariantes. `ValidadoraTelefono` aporta validación de plan y E.164 sobre `PhoneNumber`. La unicidad de teléfono, correo público y red social permanece como invariante del Aggregate.
+- `ValidadoraTelefono` usa la dependencia `libphonenumber-js` (fijada en `1.11.20`) para validar la coherencia país/prefijo/longitud contra metadata real y canonicalizar a E.164. Domain permanece libre de esa librería; vive en Application.
+- La creación de un teléfono, correo o red social se persiste una sola vez, en Directus, con el payload canónico devuelto por NestJS.
+
+### Consecuencias
+
+- Cada CREATE o UPDATE administrativo futuro gobernado por Application/Domain tendrá un caso de uso orientado al negocio, no un handler CMS genérico. ADR-019 establece que DELETE se ejecuta directamente en Directus; si una eliminación futura adquiere reglas de negocio, se reevaluará únicamente ese flujo.
+- Se agrega una dependencia de producción (`libphonenumber-js`); `npm audit` del backend reporta 0 vulnerabilidades.
+- El formato canónico persistido de un teléfono es E.164 (por ejemplo `+584121234567`); WhatsApp se sigue modelando como `SocialLink`, no como teléfono.
+- El teléfono nacional requiere una región por defecto; como el modelo de HU22 no tiene campo de país, el endpoint exige forma internacional (`+`). Un futuro campo de país o preferencia de región queda abierto.
+- Los Value Objects reciben la entrada cruda (`unknown`) y son la autoridad de validez runtime (obligatorio/vacío/formato/longitud), con límites alineados a MySQL y mensajes específicos en español. El rechazo de negocio se traduce a HTTP 422 conservando el mensaje; el Filter Hook propaga el mensaje seguro (4xx) o uno genérico (5xx), sin filtrar secretos ni SQL. Este endurecimiento no introduce una ADR nueva: aplica la validación por niveles ya aceptada.
+- El Hook aplica el payload canónico con allowlist: `company_profile_id`, `display_order` y los valores de negocio provienen del backend; solo se preserva el `id` técnico y los campos desconocidos no sobreviven (seguridad del payload; escritor único, ADR-019).
 
 ## Decisiones abiertas del formulario público de contacto
 

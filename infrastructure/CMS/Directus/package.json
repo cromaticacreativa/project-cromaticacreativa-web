@@ -7,7 +7,10 @@
   },
   "scripts": {
     "bootstrap": "directus bootstrap",
-    "start": "directus start"
+    "start": "directus start",
+    "brand": "node branding/apply-branding.mjs",
+    "configure:ui": "node admin-ui/configure-informacion-general.mjs",
+    "seed:profile": "node admin-ui/seed-company-profile.mjs"
   },
   "dependencies": {
     "directus": "12.3.0",
