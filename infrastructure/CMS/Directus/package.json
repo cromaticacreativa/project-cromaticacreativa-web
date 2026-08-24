@@ -6,6 +6,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "build": "directus bootstrap",
     "bootstrap": "directus bootstrap",
     "start": "directus start",
     "brand": "node branding/apply-branding.mjs",
