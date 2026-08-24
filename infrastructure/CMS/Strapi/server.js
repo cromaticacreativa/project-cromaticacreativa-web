@@ -1,8 +1,18 @@
 const { spawn } = require('node:child_process');
+const path = require('node:path');
+
+const strapiBin = path.join(
+  __dirname,
+  'node_modules',
+  '@strapi',
+  'strapi',
+  'bin',
+  'strapi.js',
+);
 
 const child = spawn(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['strapi', 'start'],
+  process.execPath,
+  [strapiBin, 'start'],
   {
     stdio: 'inherit',
     env: process.env,
