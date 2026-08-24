@@ -1,0 +1,130 @@
+/*
+ * Cromática Creativa — Custom CSS para Directus 12.3.0 (app 17.1.0).
+ *
+ * Se carga mediante Project Settings → "Custom CSS" (campo `custom_css` de
+ * `directus_settings`). Mecanismo OFICIAL y soportado; no modifica el core ni
+ * node_modules. Lo inyecta el script `branding/apply-branding.mjs`.
+ *
+ * Alcance: branding del login + branding básico del panel interno (isotipo +
+ * nombre, color de marca, texto oscuro no negro). No rediseña el panel interno.
+ *
+ * Los selectores del core llevan atributos de scope `[data-v-…]` (mayor
+ * especificidad) que cambian entre builds; por eso aquí se usan las clases
+ * estables sin `[data-v-…]` con `!important` puntual para ganar la cascada.
+ *
+ * NO oculta "Powered by Directus": su visibilidad depende de un entitlement de
+ * licencia; ocultarlo sin licencia evadiría la funcionalidad de licencia
+ * (prohibido por la licencia MSCL-1.0-GPL de Directus). Se deja intacto.
+ */
+
+/* ── Paleta de marca (respaldo de project_color y theme overrides) ─────────── */
+:root,
+:root[data-theme="light"] {
+  --project-color: #7c3aed;
+  --theme--primary: #7c3aed;
+  --theme--primary-background: #f1ebfc;
+  --theme--primary-subdued: #c9b4f4;
+
+  /* Texto en tonos oscuros elegantes, nunca negro puro. */
+  --theme--foreground-accent: #241f31; /* títulos ("Sign In", nombre del proyecto) */
+  --theme--foreground: #3a3550;        /* texto normal */
+  --theme--foreground-subdued: #7b7690; /* subtítulos / texto secundario */
+}
+
+/* ── Login (public view) ──────────────────────────────────────────────────── */
+/* Panel del formulario sobre fondo blanco (aunque la apariencia cambie). */
+.public-view {
+  --theme--background: #ffffff;
+  background-color: #ffffff;
+}
+
+/* Isotipo de cabecera SIN caja/fondo morado (el core lo pinta con
+ * --project-color). Se muestra el isotipo limpio sobre el fondo blanco. */
+.public-view .logo {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  inline-size: 58px !important;
+  block-size: 58px !important;
+  flex: 0 0 58px;
+}
+.public-view .logo img {
+  object-fit: contain;
+  inline-size: 44px !important;
+  block-size: 44px !important;
+}
+
+/* El nombre acompaña el aumento moderado del isotipo sin rediseñar el login. */
+.public-view .title-box .title {
+  margin-inline-start: 16px !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+}
+
+/* Quita el subtítulo "Application" bajo el nombre del proyecto en el login
+ * (respaldo de project_descriptor vacío). */
+.public-view .title-box .title .subtitle,
+.public-view .title-box .subtitle {
+  display: none !important;
+}
+
+/* Botón principal y enlaces con el color de Cromática. */
+.public-view .v-button:not(.secondary) .button {
+  --v-button-background-color: var(--theme--primary);
+  --v-button-background-color-hover: #6d28d9;
+}
+.public-view a {
+  color: var(--theme--primary);
+}
+
+/* El enlace "He olvidado mi Contraseña" (español) es más largo que "Forgot
+ * Password" y chocaba con el botón: el contenedor .buttons usa
+ * justify-content: space-between SIN gap. Se le da separación a la izquierda. */
+.public-view .buttons .forgot-password {
+  margin-inline-start: 1.25rem;
+  text-align: end;
+}
+
+/* Mobile: priorizar el formulario; el fondo animado no debe generar overflow. */
+@media (max-width: 640px) {
+  .public-view {
+    overflow-x: hidden;
+  }
+  .public-view .logo {
+    inline-size: 52px !important;
+    block-size: 52px !important;
+    flex-basis: 52px;
+  }
+  .public-view .logo img {
+    inline-size: 40px !important;
+    block-size: 40px !important;
+  }
+  .public-view .title-box .title {
+    margin-inline-start: 12px !important;
+    font-size: 15px !important;
+  }
+}
+
+/* ── Información General: ocultar el "Guardar" global SOLO en esta pantalla ──── */
+/* El gestor (company-info-manager) añade la clase `cc-info-general` a <body>
+ * mientras está montado; fuera de esa pantalla la clase NO existe, por lo que
+ * esta regla no puede afectar a otras colecciones (scope garantizado por la clase,
+ * no por el selector). Cada dato (teléfono/correo/red/ubicación) y el correo
+ * receptor se guardan con su propio botón; el Guardar global ya no participa.
+ * Si el selector interno del botón cambia entre versiones de Directus, ajústelo
+ * aquí: el gate `body.cc-info-general` seguirá impidiendo cualquier efecto fuera
+ * de Información General. */
+body.cc-info-general .header-bar .actions .save-options,
+body.cc-info-general .header-bar .actions > .v-button {
+  display: none !important;
+}
+
+/* ── Panel interno (branding básico) ──────────────────────────────────────── */
+/* Isotipo del módulo de navegación SIN caja morada; se conserva el logo, se
+ * quita solo el fondo/relleno de marca de Directus. */
+.module-bar-logo {
+  background-color: transparent !important;
+  padding: 0.5rem !important;
+}
+.module-bar-logo .custom-logo {
+  object-fit: contain;
+}

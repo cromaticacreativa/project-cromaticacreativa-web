@@ -1,0 +1,46 @@
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# IDE / editor local files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Test / coverage output
+TestResults/
+coverage/
+coverage.*
+
+# Node.js / TypeScript generated files
+**/node_modules/
+**/dist/
+**/.vite/
+**/.cache/
+*.tsbuildinfo
+
+# Directus local runtime
+infrastructure/CMS/Directus/.env
+infrastructure/CMS/Directus/uploads/*
+!infrastructure/CMS/Directus/uploads/.gitkeep
