@@ -203,7 +203,7 @@ test('el caso de uso no dispone de ningún puerto de escritura (escritor único)
   assert.doesNotMatch(reader, escrituras);
 });
 
-test('el Mapper traduce colecciones de Directus a la entrada abierta del caso de uso', () => {
+test('el Mapper traduce colecciones del CMS a la entrada abierta del caso de uso', () => {
   const telefono = AgregarInformacionDeContactoMapper.toCommand({ collection: 'phone', payload: { number: ' +58 0412 1234567 ' } });
   assert.deepEqual(telefono.entrada, { tipo: TIPO_TELEFONO, datos: { numero: ' +58 0412 1234567 ' } });
 
@@ -222,7 +222,7 @@ test('el Mapper traduce colecciones de Directus a la entrada abierta del caso de
   assert.throws(() => AgregarInformacionDeContactoMapper.toCommand({ collection: 'project', payload: {} }), /no forma parte de HU22/);
 });
 
-test('el Mapper traduce el resultado canónico al payload de Directus', () => {
+test('el Mapper traduce el resultado canónico al payload del CMS', () => {
   const respuesta = AgregarInformacionDeContactoMapper.toResponse({
     tipo: TIPO_TELEFONO,
     companyProfileId: PROFILE_ID,

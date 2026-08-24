@@ -1,5 +1,5 @@
 /**
- * Contrato HTTP de entrada de HU23 (modificar). El Filter Hook envía la colección
+ * Contrato HTTP de entrada de HU23 (modificar). El CMS envía la colección
  * de origen, el id del registro a modificar y el payload parcial del update.
  */
 export type ModificarInformacionDeContactoRequestDto = {

@@ -7,7 +7,7 @@ import { IValidationError } from '../Ports/IValidationError';
  * Puede transportar un mensaje general y una lista `errors` de errores por campo
  * (`field` en vocabulario del caso de uso). `esConflicto` distingue un conflicto
  * de estado (duplicado, HTTP 409) de una validación de entrada (HTTP 422). La
- * traducción a HTTP y el mapeo de `field` a las columnas de Directus ocurren en
+ * traducción a HTTP y el mapeo de `field` a las columnas de negocio ocurren en
  * Presentation; Domain sigue siendo la autoridad de las invariantes.
  */
 export class InformacionDeContactoRechazadaException extends Error {

@@ -4,7 +4,7 @@ Esta guía describe el desarrollo sobre la fundación Node.js/NestJS activa.
 
 ## Estado del entorno y transición
 
-El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. Directus `12.3.0` está incorporado en `infrastructure/CMS/Directus/` como aplicación Node independiente, con la extensión estable `extensions/company-profile/`. HU22 "Agregar información de contacto" es el primer caso de uso Application real de CompanyProfile e incluye un endpoint interno (`/internal/cms/company-profile/contact-information`); no existen todavía endpoints públicos y, fuera de HU22, los demás casos de uso siguen pendientes. El frontend no está implementado.
+El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. **Strapi 5** es el CMS administrativo, incorporado en `infrastructure/CMS/Strapi/` como aplicación Node independiente que comparte **la misma base MySQL** del backend pero gobierna solo sus tablas internas; las **TypeORM migrations** (registradas, `synchronize: false`) son la autoridad estructural de las tablas de negocio (ADR-025 y ADR-027). Directus fue retirado. HU22–HU25 son los primeros casos de uso Application reales de CompanyProfile y su lógica permanece intacta; su frontera HTTP interna (`/internal/cms/company-profile/*`) existe pero **no está registrada** en esta fase, pendiente de la integración con Strapi. No existen todavía endpoints públicos. El frontend no está implementado.
 
 La implementación .NET/EF/PostgreSQL anterior fue retirada después de comprobar la equivalencia y solo permanece en Git/ADRs históricas.
 
@@ -70,7 +70,7 @@ Al crear un Aggregate o Entity con identidad, Application/composition genera o p
 React → NestJS Controller → QueryBus → QueryHandler → Read Port ← TypeORM → MySQL
 ```
 
-Las consultas administrativas ordinarias serían directas mediante Data Studio si Directus supera la PoC; no requieren Queries artificiales.
+Las consultas administrativas ordinarias se resuelven en el panel del CMS (Strapi); no requieren Queries artificiales en NestJS.
 
 ## Agregar un Command
 
@@ -83,9 +83,9 @@ Las consultas administrativas ordinarias serían directas mediante Data Studio s
 7. Coordinar efectos externos mediante ports.
 8. Devolver resultados seguros y probar el caso.
 
-No incluir DataSource, repositories TypeORM, Persistence Models, Directus o proveedores en un Command.
+No incluir DataSource, repositories TypeORM, Persistence Models, el CMS o proveedores en un Command.
 
-Para un CREATE o UPDATE administrativo gobernado por Application/Domain, el Handler devuelve error, aprobación o payload canónico. Puede leer estado, pero no ejecuta el `INSERT` o `UPDATE` final de la misma operación: Directus es el escritor final único. Los DELETE administrativos se ejecutan directamente en Directus y no requieren Command, Handler, Strategy, validación o endpoint backend mientras no exista una regla de negocio adicional. Si una eliminación adquiere una invariante en el futuro, se reevaluará esa operación concreta.
+Para un CREATE o UPDATE administrativo gobernado por Application/Domain, el Handler devuelve error, aprobación o payload canónico. Puede leer estado, pero no ejecuta el `INSERT` o `UPDATE` final: en el flujo objetivo Strapi ejecuta la escritura final con ese payload. GET y DELETE los resolverá Strapi directo a MySQL mediante su futura infraestructura custom (NestJS no es un CRUD). El mecanismo concreto de la integración administrativa con Strapi se definirá en la fase de integración (ADR-027).
 
 ## Agregar un port
 
@@ -108,48 +108,63 @@ Para un CREATE o UPDATE administrativo gobernado por Application/Domain, el Hand
 
 Actualmente existen cero endpoints. No reservar rutas ni códigos HTTP antes de implementarlos.
 
-## Persistencia y migrations
+## Persistencia y migrations (ADR-027)
 
-1. Diseñar un Persistence Model TypeORM separado del modelo Domain en `Infrastructure/Persistence/Models` del contexto propietario.
+> Las **TypeORM migrations** son la única autoridad estructural de las tablas de
+> negocio. Están **registradas** en el DataSource y crean/evolucionan esas tablas;
+> `synchronize` permanece `false`. Strapi comparte la base pero no crea, altera ni
+> migra las tablas de negocio.
+
+1. Diseñar un Persistence Model TypeORM separado del modelo Domain en
+   `Infrastructure/Persistence/Models` del contexto propietario.
 2. Definir mapping Domain ↔ Persistence.
-3. Configurar claves, nulabilidad, unicidad, relaciones internas, checks compatibles, índices, cardinalidades y delete behaviors.
-4. Generar una TypeORM Migration en `Infrastructure/Persistence/Migrations` del mismo contexto.
-5. Revisar operaciones forward/revert y pérdida potencial de datos.
-6. Probar contra MySQL en un entorno seguro.
-7. Verificar que Directus, si ya fue adoptado, introspeccione sin alterar el esquema.
-8. Versionar migration y documentación juntas.
+3. Configurar claves, nulabilidad, unicidad, relaciones internas, checks
+   compatibles, índices, cardinalidades y delete behaviors.
+4. Generar una TypeORM Migration en `Infrastructure/Persistence/Migrations` del
+   mismo contexto y registrarla en la configuración del módulo.
+5. Revisar operaciones forward/revert y probar contra MySQL en un entorno seguro.
+6. Versionar migration y documentación juntas.
 
-No usar `synchronize: true`. Mantener el único DataSource técnico global, migrations con ownership modular, variables documentadas, ausencia de FKs cruzadas y ausencia de tabla `ContactRequest`. No agregar migrations bajo una capa global `database`.
+Los Persistence Models también se usan para lectura/reconstrucción de estado en las
+validaciones de negocio (por ejemplo `ICompanyProfileStateReader`).
 
 Para CompanyProfile, mapear colecciones Domain sin IDs a filas técnicas: phone, email y social_link conservan UUID de Infrastructure cuando persiste el mismo valor lógico; location usa `company_profile_id` como PK/FK. WhatsApp se modela como SocialLink. El destinatario interno vive en `company_profile` y nunca se mezcla automáticamente con los emails públicos.
 
-## CREATE/UPDATE administrativos y Directus
+## CREATE/UPDATE administrativos y el CMS (Strapi)
 
-Patrón general de un CREATE o UPDATE administrativo:
+Patrón objetivo de un CREATE o UPDATE administrativo de negocio (integración con
+Strapi **pendiente**, ADR-025):
 
-1. Filter Hook bloqueante antes de persistir.
-2. Llamada autenticada a un endpoint interno NestJS.
+1. El Administrador edita en Strapi Admin.
+2. Una integración/plugin custom de Strapi (futura) llama a un endpoint interno NestJS autenticado.
 3. Request DTO → Command → `CommandBus` → Handler.
 4. Lectura opcional mediante port/TypeORM.
 5. Ejecución de Domain.
 6. Error o payload canónico.
-7. Cancelación o continuación del Hook.
-8. Escritura final única de Directus.
-9. Prueba explícita de ausencia de doble escritura.
+7. Escritura final única (mecanismo a definir con Strapi).
+8. Prueba explícita de ausencia de doble escritura.
 
-La autenticación Hook → NestJS usa el token técnico `Bearer` de ADR-023 (`CMS_INTERNAL_TOKEN`/`BACKEND_INTERNAL_TOKEN`); no elegir otro mecanismo sin una nueva ADR.
+En esta fase **no** existe la integración visual/custom Strapi → NestJS, ni la
+autenticación service-to-service, ni el re-registro de la frontera interna. NestJS
+sigue siendo la autoridad de reglas de negocio; las TypeORM migrations gobiernan el
+schema de las tablas de negocio; Strapi es el CMS administrativo (auth + sus tablas
+internas) y accederá a los datos de negocio mediante infraestructura custom en una
+fase posterior. No introducir un login propio en NestJS.
 
-DELETE sigue un flujo distinto: confirmación y permisos administrativos en Directus → DELETE directo, sin Filter Hook ni NestJS. No crear endpoint, Command, Handler, Strategy o validación backend para eliminar mientras no exista una regla de negocio adicional. Si aparece una invariante futura, reevaluar solo esa eliminación.
+## Lógica de negocio de CompanyProfile (HU22–HU25) — conservada
 
-## HU22 — Agregar información de contacto
+La lógica de negocio de HU22–HU25 permanece **intacta** en NestJS tras retirar
+Directus; solo dejó de estar registrada su frontera HTTP interna (pendiente de la
+integración Strapi). Sirve de referencia del patrón anterior.
 
-Implementación real de referencia del patrón anterior. Cubre creaciones de `phone`, `email` y `social_link`, y el cambio del correo receptor por la misma familia de Strategies.
+### HU22 — Agregar información de contacto
+
+Cubre creaciones de `phone`, `email` y `social_link`, y el cambio del correo receptor por la misma familia de Strategies.
 
 - Application: `Commands/AgregarInformacionDeContacto/` contiene únicamente el `Command` y el `Handler` orquestador. El `Command` solo transporta una entrada abierta; no declara enums, uniones de variantes ni resultados. El `Handler` no contiene `switch`/`if` por tipo ni importa `EmailAddress`: carga el Aggregate una vez y resuelve polimórficamente una Strategy compatible. Cada Strategy es propietaria de su identificador (`TIPO_TELEFONO`, `TIPO_CORREO`, `TIPO_CORREO_RECEPTOR`, `TIPO_RED_SOCIAL`) y del narrowing de sus `datos`. `IResultadoInformacionDeContacto` es la base común; `IResultadoInformacionDeContactoOrdenado` exige `companyProfileId` y `displayOrder` para las colecciones públicas, mientras `IResultadoCorreoReceptor` no admite esos campos. `AgregarCorreoStrategy` y `AgregarCorreoReceptorStrategy` comparten una sola `Validations/ValidadoraCorreo.ts`; esta construye `EmailAddress` y traduce `InvalidValueObjectException.reason` sin duplicar sus reglas. `ValidadoraTelefono` conserva la canonicalización E.164 con `libphonenumber-js`.
 - Infrastructure: `Adapters/CompanyProfileStateReader.ts` reconstruye el Aggregate con TypeORM (solo `findOne`); no escribe.
-- Presentation: `Controllers/CompanyProfileCmsController.ts`, sus DTOs y Mappers. `POST /internal/cms/company-profile/contact-information` usa `AgregarInformacionDeContactoMapper`; `POST /internal/cms/company-profile/contact-request-recipient-email` usa `AgregarCorreoReceptorMapper`, pero ambos despachan `AgregarInformacionDeContactoCommand`.
-- Seguridad: `src/Infrastructure/Security/CmsInternalAuthGuard.ts` protege `/internal/cms/*`.
-- Directus: `infrastructure/CMS/Directus/extensions/company-profile/` (Filter Hook estable de CompanyProfile, fail closed).
+- Presentation: `Controllers/CompanyProfileCmsController.ts`, sus DTOs y Mappers. La frontera interna (`/internal/cms/company-profile/*`) usa `AgregarInformacionDeContactoMapper` y `AgregarCorreoReceptorMapper`, ambos despachan `AgregarInformacionDeContactoCommand`. El controller **no está registrado** en `CompanyProfileModule` en esta fase.
+- Seguridad: la protección service-to-service (antes `CmsInternalAuthGuard`, retirado con Directus) se rediseñará junto con la integración de Strapi.
 
 Separación de validaciones: la validez intrínseca vive en los Value Objects, `ValidadoraCorreo` traduce los motivos de `EmailAddress` al rechazo Application compartido, la validación telefónica de plan vive en `ValidadoraTelefono`, y la unicidad de teléfono/correo/red permanece en el Aggregate `CompanyContactInformation`. WhatsApp es un `SocialLink`, nunca un teléfono. Los Value Objects reciben la entrada cruda (`unknown`) desde la frontera y rechazan `null`/`undefined`/no-string con mensajes específicos; sus límites de longitud coinciden con MySQL, de modo que un valor aprobado por Domain no falla luego por longitud:
 
@@ -159,101 +174,61 @@ Separación de validaciones: la validez intrínseca vive en los Value Objects, `
 - `Address`: obligatoria; `trim`; no vacía; entre 10 y 500 caracteres. El mínimo es estructural y no exige palabras concretas ni existencia geográfica.
 - `GeoCoordinates`: números finitos; latitud [-90, 90]; longitud [-180, 180], con mensajes distintos por caso.
 
-Flujo de excepciones y mensajes: Domain lanza `InvalidValueObjectException`/`InvalidGeoCoordinatesException`; Application las traduce a `InformacionDeContactoRechazadaException`/`UbicacionRechazadaException` (para correo, exclusivamente mediante `ValidadoraCorreo`); el Controller las convierte en HTTP 422 y Presentation traduce `correo` a la columna de la frontera (`address` o `contact_request_recipient_email`). El Filter Hook propaga mensajes seguros de 4xx y usa uno genérico ante errores técnicos.
+Flujo de excepciones y mensajes: Domain lanza `InvalidValueObjectException`/`InvalidGeoCoordinatesException`; Application las traduce a `InformacionDeContactoRechazadaException`/`UbicacionRechazadaException` (para correo, exclusivamente mediante `ValidadoraCorreo`); el Controller las convierte en HTTP 422 y Presentation traduce `correo` a la columna de la frontera (`address` o `contact_request_recipient_email`). La integración del CMS deberá propagar mensajes seguros de 4xx y usar uno genérico ante errores técnicos.
 
 Organización de `CompanyProfile.Application`: `Commands/` para casos de uso CQRS (Command + Handler); `Strategies/` para las implementaciones de Strategy de Application; `Ports/` para los contratos/interfaces que consume Application (`IEntradaInformacionDeContacto`, `IResultadoInformacionDeContacto`, `IAgregarInformacionDeContactoStrategy`, `ICompanyProfileStateReader`, `IValidadora`); `Validations/` para implementaciones concretas de validación; `Exceptions/` para excepciones propias; `Queries/` para lecturas CQRS. Las interfaces no se colocan junto a sus implementaciones ni en una carpeta `Interfaces`: van en `Ports`.
 
-Patrón Strategy (para respetar OCP): `Handler → colección de Strategies → Strategy por tipo → Aggregate`. Las Strategies se inyectan como una colección mediante un token del caso de uso (`AGREGAR_INFORMACION_DE_CONTACTO_STRATEGIES`); cada una declara `soporta(entrada)` y `ejecutar(...)`. Si ninguna soporta la entrada se rechaza; si más de una la soporta se trata como error de configuración. Como la entrada es un contrato abierto, agregar un medio nuevo no modifica el `Handler` ni un enum/unión central: se crea la Strategy con su propio identificador de tipo y se registra en el composition root; si además el medio llega por una colección/forma nueva de Directus, se extiende la traducción de frontera del Mapper de Presentation. Strategy no es obligatorio para todo Command: aplica cuando existen variantes extensibles por tipo.
+Patrón Strategy (para respetar OCP): `Handler → colección de Strategies → Strategy por tipo → Aggregate`. Las Strategies se inyectan como una colección mediante un token del caso de uso (`AGREGAR_INFORMACION_DE_CONTACTO_STRATEGIES`); cada una declara `soporta(entrada)` y `ejecutar(...)`. Si ninguna soporta la entrada se rechaza; si más de una la soporta se trata como error de configuración. Como la entrada es un contrato abierto, agregar un medio nuevo no modifica el `Handler` ni un enum/unión central: se crea la Strategy con su propio identificador de tipo y se registra en el composition root; si además el medio llega por una colección/forma nueva del CMS, se extiende la traducción de frontera del Mapper de Presentation. Strategy no es obligatorio para todo Command: aplica cuando existen variantes extensibles por tipo.
 
 Precondición: `company_profile` (singleton) debe existir antes de agregar; HU22 no crea el perfil. Si no existe, el caso de uso rechaza la operación.
 
-### Ejecutar HU22 localmente
-
-1. Genere un token aleatorio y configúrelo en ambos lados: `CMS_INTERNAL_TOKEN` en `backend/.env` y el mismo valor en `BACKEND_INTERNAL_TOKEN` de `infrastructure/CMS/Directus/.env`, junto con `BACKEND_INTERNAL_URL` (p. ej. `http://localhost:3000`). Nunca versione el token.
-2. Con MySQL y las migrations al día, inicie el backend (`npm run start`) y Directus (`npm run start`).
-3. Asegure que exista la fila `company_profile`.
-4. Cree un `phone`, `email` o `social_link` desde Data Studio; verifique que el valor persistido sea el canónico devuelto por NestJS.
-5. Intente un teléfono inválido o duplicado y verifique que Directus cancele la creación y MySQL no cambie.
-6. Si el entorno no ofrece MySQL/Directus reales, documente los pasos como verificación manual pendiente; no invente resultados.
-
-## HU24 — Agregar ubicación
+### HU24 — Agregar ubicación
 
 Segundo caso de uso administrativo de CompanyProfile. Es un flujo único (no usa Strategy: no hay variantes por tipo) y solo cubre la **creación** de la ubicación.
 
 - Application: `Commands/AgregarUbicacion/` (`AgregarUbicacionCommand` con `direccion`/`latitud`/`longitud` y el `Handler` orquestador), el resultado `Ports/IResultadoUbicacion.ts` y el rechazo de negocio `Exceptions/UbicacionRechazadaException.ts`. Reutiliza el puerto de solo lectura `ICompanyProfileStateReader` (no se crea un repositorio de ubicación).
 - Domain: `Address` (`trim`, no vacío y longitud 10..500), `GeoCoordinates` (finitos, latitud [-90,90], longitud [-180,180]) y `CompanyLocation` (`Address` + `GeoCoordinates`). El Handler no duplica esas reglas; traduce `InvalidValueObjectException`/`InvalidGeoCoordinatesException` a `UbicacionRechazadaException`.
 - Cardinalidad 0..1: el Handler rechaza si `informacion.location !== null` (no sobrescribe; modificar es HU25). `CompanyContactInformation.setLocation` se usa en memoria; NestJS no persiste.
-- Presentation: endpoint `POST /internal/cms/company-profile/location` en `CompanyProfileCmsController`, sus DTOs y `Mappers/AgregarUbicacionMapper.ts` (traduce `address`/`latitude`/`longitude` ↔ `direccion`/`latitud`/`longitud`; el `company_profile_id` canónico procede del Aggregate, no del Administrador).
-- Directus: la misma extensión `extensions/company-profile/` añade `location.items.create` con ruta explícita; reutiliza `CmsInternalAuthGuard`, el token de ADR-023 y el diseño fail closed. No se almacena enlace de Google Maps; solo `address`/`latitude`/`longitude`.
+- Presentation: `POST /internal/cms/company-profile/location` en `CompanyProfileCmsController` (no registrado en esta fase), sus DTOs y `Mappers/AgregarUbicacionMapper.ts` (traduce `address`/`latitude`/`longitude` ↔ `direccion`/`latitud`/`longitud`; el `company_profile_id` canónico procede del Aggregate, no del Administrador).
 
 Persistencia: la tabla `location` ya existe (`company_profile_id` como PK/FK, `address`, `latitude`, `longitude`); HU24 no crea migration, no agrega `id` ni columnas de mapa y no genera UUID para la ubicación.
 
-### Ejecutar HU24 localmente
+## Ejecutar el CMS (Strapi) localmente
 
-1. Con el token configurado (igual que HU22) y `company_profile` (singleton) existente pero **sin** fila en `location`, inicie backend y Directus.
-2. Cree una `location` válida desde Data Studio; verifique que se persista el `address` canónico (trim) y las coordenadas devueltas por NestJS, con el `company_profile_id` del singleton.
-3. Intente crear una segunda `location`: NestJS rechaza (422) y Directus cancela; MySQL conserva solo la primera.
-4. Intente coordenadas fuera de rango, dirección vacía o una dirección trivial como `a`: Directus cancela y MySQL no cambia.
-5. Si el entorno no ofrece MySQL/Directus reales, documente los pasos como verificación manual pendiente; no invente resultados.
-
-## Ejecutar Directus localmente — HU09
-
-Directus requiere Node.js `>=22`. NestJS y Directus son procesos independientes, pero deben apuntar a la misma base MySQL.
-
-1. Prepare MySQL y una única base para Cromática Creativa.
-2. Cree `backend/.env` desde `.env.example` de la raíz con `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` y `MYSQL_PASSWORD` reales.
-3. Desde `backend/`, instale y aplique las migrations TypeORM:
-
-   ```powershell
-   cd backend
-   npm ci
-   npm run migration:run
-   ```
-
-4. Verifique que existan `corporate_client`, `project`, `media`, `service`, `category`, `company_profile`, `phone`, `email`, `location`, `social_link` y `typeorm_migration`.
-5. Cree `infrastructure/CMS/Directus/.env` desde su `.env.example`. Use `DB_CLIENT=mysql` y haga coincidir exactamente `DB_HOST/DB_PORT/DB_DATABASE` con `MYSQL_HOST/MYSQL_PORT/MYSQL_DATABASE`. Configure valores locales reales y no versionados para `DB_USER`, `DB_PASSWORD`, `SECRET`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
-6. Instale, inicialice e inicie:
-
-   ```powershell
-   cd infrastructure/CMS/Directus
-   npm ci
-   npm run bootstrap
-   npm run start
-   ```
-
-7. El script `bootstrap` ejecuta el comando oficial `directus bootstrap`: instala/migra exclusivamente las tablas internas y, en la primera inicialización, crea el Administrador con `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
-8. Abra `http://localhost:8055/admin`, pruebe login válido y rechazo de contraseña/correo inválidos.
-9. Confirme que el registro público continúe deshabilitado —es el valor predeterminado— y que no exista flujo público “Crear cuenta” o “Registrarse”.
-10. Confirme que las diez tablas de negocio sean reconocidas por Directus sin recrearlas ni cambiar su estructura desde Data Model.
-
-El reset por correo es nativo de Directus y utiliza `PUBLIC_URL`. Para envío real se requieren `EMAIL_TRANSPORT=smtp`, `EMAIL_FROM` y las variables `EMAIL_SMTP_*` con credenciales reales; mientras no existan, queda **PREPARADO / NO VERIFICADO**. Para desarrollo o emergencia puede usarse el comando oficial:
+Strapi es una aplicación Node independiente en `infrastructure/CMS/Strapi/` que
+comparte la **misma** base MySQL/MariaDB del backend (`STRAPI_DB_*` apuntan a la
+base `MYSQL_*`). Strapi gobierna solo sus tablas internas; las TypeORM migrations
+gobiernan las tablas de negocio. La guía completa (variables y despliegue en
+Hostinger) está en su propio
+[`README.md`](../infrastructure/CMS/Strapi/README.md).
 
 ```powershell
-npx directus users passwd --email <correo> --password <nueva-contraseña>
+cd infrastructure/CMS/Strapi
+npm install
+Copy-Item .env.example .env   # reemplace placeholders y configure STRAPI_DB_*
+npm run develop               # crea el primer administrador en el primer arranque
 ```
 
-No se crean tablas `directus_*` con TypeORM ni se modifican tablas de negocio desde Directus.
+`npm run build` compila el panel sin requerir base de datos; `npm run develop` y
+`npm run start` requieren la base compartida configurada (en su primer arranque
+Strapi crea/evoluciona solo el schema de sus tablas internas). No usar SQLite.
 
-## PoC de Directus
+## PoC de Strapi
 
-HU09 local no equivale a adopción productiva. La PoC posterior en el **Hostinger Business Web Hosting existente** debe documentar evidencia de:
+La adopción productiva de Strapi está condicionada a una PoC en el **Hostinger
+Business Web Hosting existente** que documente evidencia de:
 
-1. Node.js 22;
-2. conexión MySQL;
-3. tablas internas de Directus;
-4. Data Studio;
-5. introspección de tablas externas;
-6. Filter Hooks bloqueantes;
-7. Hook → NestJS;
-8. aprobación/rechazo;
-9. payload canónico;
-10. persistencia aprobada;
-11. no doble escritura;
-12. uploads;
-13. extensions;
-14. supervivencia tras reinicio/redeploy.
+1. ejecución de Node.js 22 como aplicación Node administrada;
+2. conexión a la base MySQL/MariaDB única compartida con el backend;
+3. inicialización de las tablas internas de Strapi (bootstrap);
+4. acceso y funcionamiento del panel de administración;
+5. autenticación de administradores y roles/permisos;
+6. `npm run build` y arranque (`npm run start`) en el entorno;
+7. persistencia y comportamiento de uploads;
+8. supervivencia de uploads y configuración tras reinicio/redeploy;
+9. (fase posterior) integración administrativa custom Strapi → NestJS y su autenticación service-to-service.
 
-No declarar Directus adoptado antes de completar todos los criterios. Si falla, crear una ADR para reconsiderar el CMS sin asumir alternativa.
+No declarar Strapi adoptado antes de completar los criterios. Si falla, registrar una ADR para reconsiderar el CMS sin asumir alternativa.
 
 ## Formulario de contacto
 
@@ -273,13 +248,13 @@ Flujo futuro:
 
 Los tres ports y `ContactEmailDto` se materializan solo junto con el caso de uso consumidor.
 
-Directus y MySQL no forman parte del flujo por defecto. No crear tablas para `Client` o `ContactRequest` sin finalidad y decisión. `From` es técnico, `To` procede de CompanyProfile y `Reply-To` del `EmailAddress` de `Client`.
+El CMS (Strapi) y MySQL no forman parte del flujo por defecto. No crear tablas para `Client` o `ContactRequest` sin finalidad y decisión. `From` es técnico, `To` procede de CompanyProfile y `Reply-To` del `EmailAddress` de `Client`.
 
 ## React/Vite — fase posterior
 
 - No existe frontend en el árbol actual; implementarlo requiere una tarea posterior explícita.
 - Cuando se implemente, crear `app`, `pages`, `features`, `components`, `hooks`, `services`, `types`, `utils` y `assets` por responsabilidades reales.
-- React consume solo NestJS; nunca Directus/MySQL.
+- React consume solo NestJS; nunca Strapi/MySQL.
 - Definir tipos desde contratos HTTP, no compartir Domain.
 - Cubrir accesibilidad y estados de carga, vacío, éxito y error.
 - No elegir router, estado, UI kit o cliente HTTP sin requisito.
@@ -290,10 +265,10 @@ Directus y MySQL no forman parte del flujo por defecto. No crear tablas para `Cl
 - Application: Handlers, ports y precondiciones con fakes deterministas.
 - Infrastructure: mappings y TypeORM/MySQL.
 - Presentation: DTOs, validación y contratos HTTP.
-- Directus: los 14 criterios de PoC, hooks y escritor único.
+- CMS (Strapi): criterios de PoC en Hostinger y, en fase posterior, la integración administrativa Strapi → NestJS.
 - Frontend: comportamiento crítico y accesibilidad cuando exista tooling.
 
-Antes de entregar, confirmar dirección de dependencias, ausencia de acceso a `internal/` ajeno, Domain libre de frameworks, DTOs explícitos, cero doble escritura, React aislado de Directus/MySQL, ausencia de secretos y documentación coherente.
+Antes de entregar, confirmar dirección de dependencias, ausencia de acceso a `internal/` ajeno, Domain libre de frameworks, DTOs explícitos, cero doble escritura, React aislado de Strapi/MySQL, ausencia de secretos y documentación coherente.
 
 ## Comandos verificados
 
@@ -307,14 +282,14 @@ npm test
 npm run build
 ```
 
-Backend ofrece además `migration:show`, `migration:run` y `migration:revert`. Estos scripts compilan primero y usan `dist/src/Infrastructure/Persistence/TypeOrmDataSource.js`; requieren `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` y `MYSQL_PASSWORD`. No se ejecutaron contra una base real en esta corrección.
+Backend ofrece además `migration:show`, `migration:run` y `migration:revert`. El DataSource registra las tres migrations de negocio (autoridad estructural, ADR-027) y estos scripts las aplican contra MySQL. Usan `dist/src/Infrastructure/Persistence/TypeOrmDataSource.js` y las variables `MYSQL_*`; no se ejecutaron contra una base real en esta tarea.
 
-Desde `infrastructure/CMS/Directus/`:
+Desde `infrastructure/CMS/Strapi/`:
 
 ```powershell
-npm ci
-npm run bootstrap
-npm run start
+npm install
+npm run build
+npm run develop
 ```
 
-Bootstrap e inicio requieren la `.env` local y MySQL real; si el entorno no dispone de ellos, deben reportarse como no verificados en lugar de inventar resultados.
+`npm run build` no requiere base de datos. `npm run develop`/`npm run start` requieren la `.env` local (con `STRAPI_DB_*` apuntando a la base compartida); si el entorno no dispone de MySQL, deben reportarse como no verificados en lugar de inventar resultados.

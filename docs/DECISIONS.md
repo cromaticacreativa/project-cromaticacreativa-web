@@ -151,7 +151,7 @@ Misión, visión, descripción institucional general, eslóganes y textos corpor
 
 ### Decisión
 
-Mantener ese contenido en código. No crear una entidad `SiteSettings`, un módulo `Site` o tablas equivalentes únicamente para hacerlo administrable. Si Directus supera la PoC de ADR-018, podrá gestionar proyectos, multimedia, Clientes Corporativos, servicios e información de CompanyProfile conforme a ADR-019.
+Mantener ese contenido en código. No crear una entidad `SiteSettings`, un módulo `Site` o tablas equivalentes únicamente para hacerlo administrable. La gestión administrativa de proyectos, multimedia, Clientes Corporativos, servicios e información de CompanyProfile corresponde al CMS (Strapi, ADR-025) a través de NestJS, no a este contenido estático.
 
 ### Consecuencias
 
@@ -408,7 +408,12 @@ El deployment objetivo se evaluará sobre el **Hostinger Business Web Hosting ex
 
 ## ADR-018 — Directus provisional sujeto a PoC
 
-**Estado:** Pendiente
+**Estado:** Reemplazada por ADR-025
+
+> Registro histórico. Directus fue evaluado como CMS provisional pero se retiró
+> antes de completar la PoC en el Hostinger Business Web Hosting existente. La
+> plataforma administrativa vigente es Strapi (ADR-025). Se conserva para explicar
+> la evolución.
 
 ### Contexto
 
@@ -429,7 +434,15 @@ Como evidencia estructural de HU09, Directus `12.3.0` está incorporado en `infr
 
 ## ADR-019 — Filter Hook bloqueante y escritor final único
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-025 en su mecanismo (principio conservado)
+
+> El principio de fondo sigue vigente y lo refuerza ADR-025: las mutaciones
+> administrativas de negocio (CREATE/UPDATE) pasan por NestJS/Application/Domain,
+> y NestJS es la autoridad de negocio. El mecanismo concreto descrito aquí (Filter
+> Hook de Directus + Directus como escritor final único) es específico de Directus
+> y quedó retirado con él. La forma productiva de la integración administrativa
+> con Strapi (incluido quién ejecuta la escritura final) se definirá en la fase de
+> integración de Strapi. Se conserva por trazabilidad.
 
 ### Contexto
 
@@ -543,7 +556,15 @@ En MySQL, `company_profile` contiene `contact_request_recipient_email`. Las tabl
 
 ## ADR-023 — Autenticación técnica Directus → NestJS
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por ADR-025
+
+> Registro histórico. La autenticación aquí descrita (token `Bearer`
+> `CMS_INTERNAL_TOKEN`/`BACKEND_INTERNAL_TOKEN` + `CmsInternalAuthGuard`) resolvía
+> la llamada Directus → NestJS. Al retirar Directus se eliminó el `CmsInternalAuthGuard`
+> y la frontera interna quedó sin registrar. La autenticación service-to-service
+> del nuevo CMS (Strapi → NestJS) se definirá e implementará en la fase de
+> integración de Strapi (ADR-025). El concepto de token técnico por ambiente,
+> tiempo constante y fail closed se conserva como candidato para esa fase.
 
 ### Contexto
 
@@ -568,6 +589,14 @@ Para la V1 se adopta un **token técnico estático, criptográficamente aleatori
 ## ADR-024 — Caso de uso administrativo orientado al negocio y validación telefónica internacional (HU22)
 
 **Estado:** Aceptada
+
+> Nota: esta ADR se redactó cuando el CMS era Directus. La decisión de fondo
+> (caso de uso orientado al negocio en vez de un handler CMS genérico, Strategies,
+> validación telefónica E.164 con `libphonenumber-js` y validación por niveles)
+> **sigue vigente** y es independiente del CMS. Toda referencia a "Directus" como
+> escritor final / colección / Filter Hook debe leerse como el CMS externo
+> genérico; su forma concreta con Strapi se define en ADR-025 y la fase de
+> integración. `CmsInternalAuthGuard` fue retirado con Directus.
 
 ### Contexto
 
@@ -606,6 +635,211 @@ Permanecen pendientes y no deben tratarse como decisiones cerradas:
 El `To` ya no es una configuración de Infrastructure: corresponde a `ContactRequestRecipientEmail`, administrado en `CompanyProfile`. El `Reply-To` corresponde al `EmailAddress` validado del solicitante. El `From` sí pertenece a la configuración técnica del proveedor en Infrastructure.
 
 Estas decisiones deberán evaluarse durante la implementación y, si alcanzan relevancia arquitectónica, registrarse mediante la siguiente ADR disponible.
+
+## ADR-025 — Strapi como plataforma administrativa; NestJS conserva la propiedad del dominio y la persistencia
+
+**Estado:** Aceptada, revisada por ADR-027
+
+Reemplaza a ADR-018 y ADR-023, y retira el mecanismo específico de ADR-019.
+
+> **Revisión (ADR-027):** una única afirmación de esta ADR fue corregida: la base
+> de datos ya **no** es independiente (`strapi_*` separada); Strapi comparte **una
+> sola** base MySQL con el backend. El resto sigue vigente y ADR-027 lo reafirma:
+> **TypeORM migrations son la autoridad estructural de las tablas de negocio** y
+> Strapi gobierna únicamente sus tablas internas. (La revisión intermedia ADR-026,
+> que otorgaba a Strapi la propiedad del schema de negocio, fue **descartada**.)
+
+### Contexto
+
+Directus se había incorporado como CMS provisional (ADR-018) con autenticación
+técnica por token (ADR-023) y un Filter Hook como escritor final único (ADR-019).
+El objetivo de despliegue es el Hostinger Business Web Hosting existente (managed
+Node, no VPS). La ejecución de Directus en ese entorno resultó inviable/no
+soportable de forma confiable para la topología prevista (dependencias del runtime
+del panel y de su modo de ejecución), por lo que no se completó su PoC.
+
+### Decisión
+
+Adoptar **Strapi 5** (TypeScript) como plataforma administrativa del proyecto y
+retirar Directus definitivamente. Reparto de responsabilidades:
+
+- **Strapi** es: panel administrativo, autenticación de administradores,
+  roles/permisos administrativos e infraestructura CMS externa, desplegada por
+  separado. **No** es dueño del modelo de negocio.
+- **NestJS** sigue siendo: autoridad de reglas de negocio, dueño de las tablas de
+  negocio, dueño de TypeORM y las migrations, y punto de entrada de las
+  operaciones administrativas de negocio.
+
+Strapi usa una **base de datos independiente** (`strapi_*`) de la base de negocio
+(`cromatica_*`). No se mezclan las tablas internas de Strapi con las de negocio.
+
+Strapi vive en `infrastructure/CMS/Strapi/` como aplicación Node independiente,
+con MySQL/MariaDB (no SQLite) y variables `STRAPI_DB_*`.
+
+Flujo administrativo objetivo (CREATE/UPDATE de negocio):
+
+```text
+Administrador → Strapi Admin → integración/plugin custom (futuro) → NestJS → Application → Domain → TypeORM → MySQL
+```
+
+### Consecuencias
+
+- **Se retira:** Directus, sus extensions (`company-info-manager`, hooks),
+  branding, seeds, `CmsInternalAuthGuard`, y las variables/tokens específicos de
+  Directus.
+- **Se conserva:** toda la lógica de negocio (Commands, Handlers, Strategies,
+  Validators, Value Objects, Aggregate, Ports y el puerto de lectura
+  `ICompanyProfileStateReader`) y la frontera HTTP interna `CompanyProfileCmsController`
+  como código de migración desacoplado del CMS anterior.
+- La frontera interna `/internal/cms/*` **no** se expone en esta fase: la
+  autenticación service-to-service Strapi → NestJS y su re-registro se
+  implementarán en la fase de integración de Strapi. No se introduce login propio
+  en NestJS.
+- Ninguna capa Domain/Application queda acoplada a Strapi. TypeORM sigue siendo la
+  autoridad del esquema de negocio.
+- La ejecución de Strapi sobre el Hostinger Business Web Hosting existente es una
+  **PoC pendiente**; no se afirma soporte oficial hasta validarla.
+
+## ADR-026 — Base MySQL única y Strapi como dueño del schema del contenido administrable
+
+**Estado:** Reemplazada por ADR-027 (descartada)
+
+> **Descartada.** La parte de esta ADR sobre la **base única compartida** se
+> conserva y la reafirma ADR-027. La parte sobre **Strapi como dueño del schema del
+> contenido administrable** (content-types nativos sobre las tablas de negocio) fue
+> **descartada**: introducía una doble autoridad estructural sobre las mismas
+> tablas y un conflicto de forma entre el schema de Strapi (id autoincremental,
+> `document_id`, tablas `*_lnk`) y el de TypeORM. ADR-027 restablece a las **TypeORM
+> migrations** como única autoridad del schema de negocio; Strapi gobierna solo sus
+> tablas internas y accederá a los datos de negocio mediante infraestructura custom
+> en una fase posterior. Se conserva por trazabilidad.
+
+Revisó ADR-025 (topología de base de datos y ownership del schema). No cambió el
+retiro de Directus ni el rol de NestJS como autoridad de reglas de negocio.
+
+### Contexto
+
+ADR-025 definió Strapi con una base de datos independiente y a TypeORM como dueño
+del schema de negocio. En la práctica, para que Strapi sea el CMS real —Content
+Manager, GET, DELETE, persistencia final, validaciones estructurales del CMS— debe
+ser dueño del schema de las tablas de contenido administrable, y operar sobre la
+misma base donde vive ese contenido. Mantener dos bases y dos dueños del schema
+sobre las mismas tablas es contradictorio.
+
+### Decisión
+
+- **Una sola base MySQL/MariaDB** (por ejemplo `cromatica_prod`) para todo:
+  tablas internas de Strapi (administradores, roles, permisos, configuración) y
+  tablas de contenido administrable (`company_profile`, `phone`, `email`,
+  `social_link`, `location`, `project`, `media`, `service`, `category`,
+  `corporate_client`). Las variables `STRAPI_DB_*` se conservan como credenciales
+  del proceso Strapi pero **apuntan a la misma base** que consume el backend
+  (`MYSQL_*`). No SQLite.
+- **Strapi es dueño del schema** de las tablas de contenido administrable (crea y
+  evoluciona sus columnas/relaciones vía content-types). Reparto:
+  - Strapi = CMS: schema del contenido, Content Manager, GET, DELETE, persistencia
+    final, validaciones estructurales (required, unique, min/max, formato), y
+    usuarios/roles/permisos.
+  - NestJS = reglas de negocio en CREATE/UPDATE (Commands/Handlers/Strategies/
+    Validators/Value Objects/Aggregate, canonicalización, duplicados semánticos,
+    invariantes cruzadas). No es CRUD para GET/DELETE.
+  - MySQL = enforcement estructural (NOT NULL, UNIQUE, FK, tipos).
+- **Flujo objetivo:**
+  - `GET`: Strapi → MySQL.
+  - `DELETE`: Strapi → MySQL.
+  - `CREATE/UPDATE con negocio`: Strapi Admin → Strapi Server → NestJS → CommandBus
+    → Handler → Domain/Validator/Strategy → payload canónico → Strapi → MySQL
+    (conceptualmente el mismo flujo que se tenía con Directus).
+- **Transición de ownership (punto de corte):** las tres migrations TypeORM
+  históricas se **conservan** para trazabilidad, pero se **de-registran** del
+  DataSource (`migrations: []`), de modo que `migration:run` ya no crea esas tablas
+  y no colisiona con el schema de Strapi. `synchronize` permanece `false`. Los
+  Persistence Models/entities de TypeORM se conservan **solo para lectura/
+  reconstrucción de estado** durante las validaciones de negocio.
+
+### Consecuencias
+
+- Clasificación de tablas: **A) administradas por Strapi** = las diez tablas de
+  contenido; **B) internas de backend** = ninguna hoy (solo la tabla técnica
+  `typeorm_migration`); **C) futuras** = ninguna definida. Solo las A pasan a
+  ownership de Strapi.
+- **Riesgo/incompatibilidad de forma de tabla:** Strapi 5 crea las tablas con su
+  propia forma (`id` autoincremental + `document_id` + timestamps + tablas de
+  enlace `*_lnk` para relaciones), distinta de la forma TypeORM histórica (PK
+  `CHAR(36)` UUID, columnas FK directas, CHECK y columna generada `cover_marker`).
+  Como las migrations nunca se aplicaron a una base real, no hay datos que
+  preservar y la forma de Strapi gobierna. Los Persistence Models/mappers/readers
+  de TypeORM deberán **reconciliarse** con las columnas reales de Strapi en la fase
+  de integración; hasta entonces no leen las tablas de Strapi tal cual.
+- Restricciones que Strapi puede expresar quedan en el content-type (required,
+  unique estructural, min/max, longitudes, `email`, regex de URL, enums). Las
+  reglas que Strapi no expresa se mantienen en NestJS (teléfono E.164, unicidad
+  compuesta `category(service,name)`, portada única de `media`, `end>=start`,
+  `published⇒title`, referencias opacas `serviceId/categoryId` sin FK) y/o en MySQL.
+- No se elimina TypeORM del proyecto; no se borran migrations históricas.
+
+## ADR-027 — TypeORM migrations gobiernan el schema de negocio; Strapi comparte la base pero solo gobierna sus tablas internas
+
+**Estado:** Aceptada
+
+Reemplaza a ADR-026. Reafirma la propiedad del schema de negocio de ADR-025 y
+conserva de ADR-026 únicamente la base MySQL única compartida.
+
+### Contexto
+
+ADR-026 hizo a Strapi dueño del schema de las tablas de negocio mediante
+content-types nativos, sobre la base única compartida. En la práctica eso genera
+**doble autoridad estructural** sobre las mismas tablas (TypeORM migrations y
+content-types de Strapi) y una **incompatibilidad de forma**: Strapi 5 crea las
+tablas con `id` autoincremental, `document_id`, timestamps y tablas de enlace
+`*_lnk`, mientras que el modelo de negocio usa PK `CHAR(36)`, columnas FK directas,
+CHECK y una columna generada (`cover_marker`). Mantener ambos es contradictorio y
+frágil.
+
+### Decisión
+
+**Una sola base MySQL/MariaDB** (por ejemplo `cromatica_prod`) para todo, con
+**ownership separado**:
+
+- **TypeORM migrations** = **única autoridad estructural** de las diez tablas de
+  negocio (`company_profile`, `phone`, `email`, `social_link`, `location`,
+  `corporate_client`, `project`, `media`, `service`, `category`). Se **re-registran**
+  en el DataSource; `synchronize` permanece `false`. No hay `migrations: []`.
+- **Strapi** = CMS administrativo (panel, login, usuarios, roles, permisos) y dueño
+  **solo de sus tablas internas** en esa misma base. **No** modela las tablas de
+  negocio como content-types nativos, ni las crea, altera o migra. Los content-types
+  de negocio creados bajo ADR-026 se **eliminan**.
+- **NestJS** = reglas de negocio (Commands/Handlers/Strategies/Validators/Value
+  Objects/Aggregate, canonicalización) en CREATE/UPDATE; devuelve un payload canónico
+  al CMS y **no** es el escritor administrativo final.
+- **MySQL** = NOT NULL, UNIQUE, FK, CHECK, tipos definidos por las migrations.
+
+Flujo objetivo (no implementado en esta fase; requiere infraestructura custom de
+Strapi):
+
+```text
+GET:    Strapi Server → MySQL
+DELETE: Strapi Server → MySQL
+CREATE: Strapi → NestJS → payload canónico → Strapi → MySQL
+UPDATE: Strapi → NestJS → payload canónico → Strapi → MySQL
+```
+
+Los Persistence Models/mappers/readers de TypeORM siguen representando el schema de
+las migrations (no se adaptan a la forma de Strapi). La infraestructura custom de
+Strapi que lea/escriba las tablas de negocio se implementará en una fase posterior;
+no se usa `synchronize: true` en ningún caso.
+
+### Consecuencias
+
+- Sin doble autoridad estructural ni doble migración: las TypeORM migrations
+  gobiernan la estructura; Strapi no compite por esas tablas.
+- Clasificación de tablas: **A) internas de Strapi** = las que crea su bootstrap;
+  **B) de negocio** = las diez, autoridad de TypeORM; **C) futuras** = ninguna.
+- La integración administrativa (GET/DELETE directos de Strapi a MySQL y
+  CREATE/UPDATE Strapi → NestJS → Strapi) queda documentada como objetivo y se
+  implementará con la infraestructura custom y su autenticación service-to-service.
+- No se elimina TypeORM ni se tocan las migrations históricas: se conservan
+  registradas e intactas.
 
 ## Cómo registrar una decisión futura
 

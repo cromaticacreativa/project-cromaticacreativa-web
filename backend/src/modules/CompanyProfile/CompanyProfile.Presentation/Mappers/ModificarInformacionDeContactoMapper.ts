@@ -13,7 +13,7 @@ const COLECCION_CORREO = 'email';
 const COLECCION_RED_SOCIAL = 'social_link';
 
 /**
- * Traduce la frontera de Directus (colección + id + payload) hacia la entrada del
+ * Traduce la frontera del CMS (colección + id + payload) hacia la entrada del
  * caso de uso de modificación, y el resultado canónico de vuelta al payload
  * técnico. El `switch` por colección vive solo aquí (Presentation). La respuesta
  * de update NO incluye `company_profile_id` ni `display_order` (no cambian).
@@ -48,7 +48,7 @@ export class ModificarInformacionDeContactoMapper {
         return { payload: { network: this.dato(resultado, 'red'), url: this.dato(resultado, 'url') } };
       default:
         throw new BadRequestException(
-          `El resultado de tipo '${resultado.tipo}' no tiene traducción de frontera en Directus.`,
+          `El resultado de tipo '${resultado.tipo}' no tiene traducción de frontera para el CMS.`,
         );
     }
   }

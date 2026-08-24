@@ -15,8 +15,8 @@ import { ModificarUbicacionCommand } from './ModificarUbicacionCommand';
 /**
  * HU25: modifica la ubicación existente reutilizando exactamente las validaciones
  * de Agregar (Address / GeoCoordinates), acumulando todos los errores. Los campos
- * ausentes en el update parcial se toman del estado actual. No persiste: Directus
- * hace el UPDATE final.
+ * ausentes en el update parcial se toman del estado actual. No persiste: el CMS
+ * externo hace el UPDATE final.
  */
 @CommandHandler(ModificarUbicacionCommand)
 export class ModificarUbicacionCommandHandler
