@@ -6,14 +6,16 @@
     "node": "22.x"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "compile": "tsc -p tsconfig.build.json",
+    "build": "npm run compile && npm run migration:run:prod",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
-    "test": "npm run build && node --test \"dist/test/*.test.js\"",
-    "migration:show": "npm run build && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:show",
-    "migration:run": "npm run build && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:run",
-    "migration:revert": "npm run build && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:revert"
+    "test": "npm run compile && node --test \"dist/test/*.test.js\"",
+    "migration:show": "npm run compile && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:show",
+    "migration:run": "npm run compile && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:run",
+    "migration:run:prod": "typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:run",
+    "migration:revert": "npm run compile && typeorm -d dist/src/Infrastructure/Persistence/TypeOrmDataSource.js migration:revert"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.1",
