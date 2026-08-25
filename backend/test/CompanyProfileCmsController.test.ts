@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
@@ -6,6 +7,7 @@ import { InformacionDeContactoRechazadaException } from '../src/modules/CompanyP
 import { UbicacionRechazadaException } from '../src/modules/CompanyProfile/CompanyProfile.Application/Exceptions/UbicacionRechazadaException';
 import { TIPO_TELEFONO } from '../src/modules/CompanyProfile/CompanyProfile.Application/Strategies/AgregarTelefonoStrategy';
 import { CompanyProfileCmsController } from '../src/modules/CompanyProfile/CompanyProfile.Presentation/Controllers/CompanyProfileCmsController';
+import { CmsServiceAuthGuard } from '../src/Infrastructure/Security/CmsServiceAuthGuard';
 
 function controller(execute: () => Promise<unknown>): CompanyProfileCmsController {
   const commandBus = { execute } as unknown as CommandBus;
@@ -96,6 +98,41 @@ test('un error técnico inesperado no se convierte en 4xx (se propaga)', async (
     (error: Error) => {
       assert.ok(!(error instanceof UnprocessableEntityException));
       assert.ok(!(error instanceof ConflictException));
+      return true;
+    },
+  );
+});
+
+test('el controller está protegido por CmsServiceAuthGuard', () => {
+  const guards = Reflect.getMetadata('__guards__', CompanyProfileCmsController) as unknown[] | undefined;
+  assert.ok(Array.isArray(guards));
+  assert.ok(guards.includes(CmsServiceAuthGuard));
+});
+
+test('initialize devuelve el payload canónico del singleton (id, singleton_key, correo)', async () => {
+  const sut = controller(async () => ({
+    companyProfileId: '11111111-1111-4111-8111-111111111111',
+    contactRequestRecipientEmail: 'destino@empresa.com',
+  }));
+  const respuesta = await sut.inicializar({ payload: { contact_request_recipient_email: 'destino@empresa.com' } });
+  assert.deepEqual(respuesta.payload, {
+    id: '11111111-1111-4111-8111-111111111111',
+    singleton_key: 1,
+    contact_request_recipient_email: 'destino@empresa.com',
+  });
+});
+
+test('initialize traduce un conflicto (perfil ya inicializado) a HTTP 409', async () => {
+  const sut = controller(async () => {
+    throw InformacionDeContactoRechazadaException.conflicto('correo', 'La información de contacto de la empresa ya fue inicializada.');
+  });
+  await assert.rejects(
+    sut.inicializar({ payload: { contact_request_recipient_email: 'destino@empresa.com' } }),
+    (error: ConflictException) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal(error.getStatus(), 409);
+      const body = error.getResponse() as { errors: Array<{ field: string; message: string }> };
+      assert.deepEqual(body.errors, [{ field: 'contact_request_recipient_email', message: 'La información de contacto de la empresa ya fue inicializada.' }]);
       return true;
     },
   );

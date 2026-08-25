@@ -124,14 +124,15 @@ flowchart LR
     strapi2 --> mysql[("MySQL única compartida: escritura final")]
 ```
 
-Flujo objetivo para CREATE/UPDATE que requieren negocio. NestJS es la autoridad de
-reglas e invariantes: valida y canonicaliza, y devuelve el payload canónico; Strapi
-ejecuta la **escritura final** (mismo flujo conceptual que se tenía con Directus).
-La integración visual/custom Strapi → NestJS, su autenticación service-to-service y
-los lifecycles se implementan en una fase posterior (ADR-027); en esta fase la
-frontera interna `/internal/cms/*` no está registrada. El principio de fondo de
-ADR-019 (las mutaciones de negocio pasan por Application/Domain, sin doble
-escritura) se conserva.
+Flujo para CREATE/UPDATE que requieren negocio. NestJS es la autoridad de reglas e
+invariantes: valida y canonicaliza, y devuelve el payload canónico; Strapi ejecuta
+la **escritura final** (mismo flujo conceptual que se tenía con Directus). Para
+**CompanyProfile** esto ya está implementado (ADR-028): `CompanyProfileCmsController`
+está registrado y protegido por `CmsServiceAuthGuard` (token técnico
+service-to-service), y en Strapi las rutas admin server-side, el Admin UI
+"Información General", OSM y el branding están implementados y cargados por el build.
+Portfolio y Services aún no tienen integración CMS. El principio de fondo de ADR-019
+(las mutaciones de negocio pasan por Application/Domain, sin doble escritura) se conserva.
 
 ### Formulario público de contacto
 
@@ -309,7 +310,7 @@ No existen schemas PostgreSQL, FKs cruzadas o dependencias Infrastructure → In
 
 Strapi está incorporado y compila (`npm run build`), pero todavía no es una capacidad adoptada para producción. La PoC debe realizarse en el **Hostinger Business Web Hosting existente**. No se afirma que Strapi esté desplegado, funcione allí o sea oficialmente soportado para esta topología.
 
-La lógica de negocio de HU22–HU25 (Commands, Handlers, Strategies, Validadoras, `ICompanyProfileStateReader` y la frontera HTTP interna `CompanyProfileCmsController`) permanece intacta en NestJS tras retirar Directus; su frontera interna **no está registrada** en esta fase y su autenticación service-to-service se rediseñará con Strapi. Permanecen abiertos los permisos CRUD finos, la integración administrativa custom Strapi → NestJS y el deployment.
+La lógica de negocio de HU22–HU25 (Commands, Handlers, Strategies, Validadoras, `ICompanyProfileStateReader` y la frontera HTTP interna `CompanyProfileCmsController`) permanece intacta en NestJS. Para CompanyProfile, esa frontera está **registrada y protegida** por `CmsServiceAuthGuard` (token técnico service-to-service; ADR-028) e incluye `initialize`. Permanecen abiertos el Admin UI/OSM/branding de Strapi, los permisos CRUD finos, la verificación E2E y el deployment; Portfolio/Services no tienen integración CMS.
 
 La PoC debe verificar:
 

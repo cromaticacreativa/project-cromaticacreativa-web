@@ -155,16 +155,32 @@ Strapi permanece provisional hasta completar todos los puntos:
 - [ ] Documentar evidencia, riesgos y límites observados.
 - [ ] Adoptar Strapi mediante actualización de ADR-025 o, si falla, reconsiderar CMS en una nueva ADR sin asumir alternativa.
 
-## Fase 6 — Integración administrativa Strapi → NestJS (fase posterior)
+## Fase 6 — Integración administrativa Strapi → NestJS (CompanyProfile)
 
-- [ ] Definir la autenticación service-to-service CMS (Strapi) → NestJS (candidato: token técnico `Bearer` por ambiente, tiempo constante, fail closed).
-- [ ] Re-registrar la frontera interna `CompanyProfileCmsController` con esa autenticación.
-- [ ] Configurar mínimo privilegio y roles/permisos para Administradores en Strapi.
-- [ ] Implementar la integración/plugin custom de Strapi que invoca los endpoints internos de NestJS, sin inventar doble canal de persistencia.
-- [ ] Probar error, aprobación, payload canónico y ausencia de doble escritura en CREATE/UPDATE; definir el flujo de DELETE.
-- [ ] Confirmar que las TypeORM migrations gobiernan las tablas de negocio (registradas, `synchronize: false`) y que Strapi solo gestiona sus tablas internas sobre la base única compartida.
+> Alcance: **solo CompanyProfile / Información General**. Portfolio y Services siguen pendientes.
+
+Backend (implementado y probado):
+
+- [x] Autenticación service-to-service CMS (Strapi) → NestJS: `CmsServiceAuthGuard` (token técnico `Bearer CMS_INTERNAL_TOKEN`, comparación de tiempo constante, fail closed; no autentica personas).
+- [x] Re-registrar `CompanyProfileCmsController` en `CompanyProfileModule` protegido por ese Guard; solo CREATE/UPDATE.
+- [x] Cubrir el hueco del singleton: `InicializarCompanyProfileCommand` + Handler + endpoint `POST /internal/cms/company-profile/initialize` (crea el perfil cuando no existe; 409 si ya existe).
+- [x] Tests: `CmsServiceAuthGuard` (token válido/ausente/mal formado/incorrecto/env ausente) y controller (guard aplicado, dispatch, respuesta canónica, conflicto). `npm test` en verde (120).
+
+Strapi server-side (implementado, cargado por el build y verificado por arranque real):
+
+- [x] Lógica en `src/company-profile/server/` (compilada por `strapi build` vía `src/index.ts`; ya NO en `src/plugins/**` excluido). Repositorio Knex interno parametrizado, cliente NestJS fail-closed, servicio de orquestación.
+- [x] Wiring de runtime: `src/index.ts` `register()` monta rutas **admin** (`type: 'admin'`) vía `strapi.server.routes(...)`; instancia el servicio con `strapi.db.connection`.
+- [x] **RBAC de servidor real**: cada ruta exige `admin::isAuthenticatedAdmin` + `admin::hasPermissions` con la acción `admin::company-profile.{read,create,update,delete}`. Acciones registradas en `bootstrap()` (verificado en arranque: log "Acciones RBAC registradas"); si el registro fallara, se emite `log.error` visible y las rutas niegan a no-Super-Admin (fail closed).
+- [x] Rutas: GET informacion-general, GET geocode, POST initialize, PUT recipient-email, CRUD de phones/emails/social-links, CRUD de location. GET/DELETE directos a MySQL; CREATE/UPDATE vía NestJS.
+- [x] Admin UI React "Información General" (`src/admin/app.tsx` + `src/admin/pages/InformacionGeneral.tsx`): menú (permiso read), 5 bloques con estados loading/error/empty/saving/success, confirmación de delete, errores inline, responsive; **botones ocultos según permisos** (create/update/delete) vía `useRBAC`.
+- [x] OpenStreetMap: búsqueda **solo con botón "Buscar"** (no autocomplete) vía proxy server-side (`/company-profile/geocode` → Nominatim con User-Agent/throttle/timeout y **cache en memoria acotado** TTL 24h/máx 200 por query normalizada), mapa OSM embebido con marcador, entrada manual. Solo se guardan address/latitude/longitude.
+- [x] Robustez: DELETE/UPDATE validan UUID (400 si inválido); UPDATE distingue registro inexistente (404) de update idempotente (éxito) re-verificando existencia; errores de constraint MySQL (UNIQUE/FK/CHECK) traducidos a seguros.
+- [x] Branding Cromática: assets recuperados del historial git a `assets/branding/`; logo, favicon y paleta (`#7C3AED`) aplicados al menú, login y tema. `palette.md` sin referencias a Directus.
+- [x] Tests server-side (`npm run test:server`, 31): repositorio, cliente, servicio (fail-closed, canónico, delete 404, UUID, update inexistente/idempotente), geocoding (cache/TTL/límite/normalización), errores/HTTP y config de rutas RBAC.
+- [x] Verificación de arranque real: Strapi inicia contra MySQL, registra las acciones RBAC y las rutas responden **401** sin admin y **404** en rutas inexistentes.
+- [ ] Marcador OSM arrastrable/click-to-set (mejora con react-leaflet); hoy el punto se fija por búsqueda o entrada manual.
+- [ ] E2E autenticado por navegador (click-through) y RBAC con rol limitado: pendiente de credenciales de admin (la BD ya tiene un Super Admin cuyo password no está disponible en este entorno).
 - [ ] Definir storage y operación de multimedia.
-- [ ] Probar flujo editorial completo.
 
 ## Fase 7 — Calidad y deployment
 

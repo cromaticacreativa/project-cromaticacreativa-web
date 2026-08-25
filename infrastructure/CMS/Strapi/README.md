@@ -74,6 +74,38 @@ ambiente. `.env` nunca se versiona.
 | `STRAPI_DB_USER` | Usuario de la base compartida. |
 | `STRAPI_DB_PASSWORD` | Contraseña de la base compartida. |
 | `STRAPI_DB_SSL` | `true`/`false` para SSL de la conexión. |
+| `BACKEND_INTERNAL_URL` | URL del backend NestJS para CREATE/UPDATE (solo servidor). Local `http://localhost:3000`; prod `https://api.cromaticacreativa.com`. |
+| `CMS_INTERNAL_TOKEN` | Token técnico Bearer hacia NestJS (solo servidor); debe coincidir EXACTAMENTE con el backend. Nunca en el bundle admin. |
+
+> `BACKEND_INTERNAL_URL` y `CMS_INTERNAL_TOKEN` son **solo de servidor**: no llevan
+> prefijo `STRAPI_ADMIN_` ni se referencian desde `src/admin/`, por lo que no se
+> incluyen en el bundle del navegador.
+
+## Integración CompanyProfile (Información General)
+
+Integración administrativa **completa** de la Información General (ADR-028):
+
+- **Server-side** ([`src/company-profile/`](src/company-profile/README.md)): repositorio
+  (Knex interno de Strapi, parametrizado, sin content-types), cliente NestJS
+  fail-closed, servicio de orquestación y rutas **admin** con **RBAC de servidor**
+  (`admin::isAuthenticatedAdmin` + `admin::hasPermissions` por operación:
+  `admin::company-profile.{read,create,update,delete}`), registradas en `src/index.ts`
+  (compiladas por `strapi build`). GET/DELETE directos a MySQL; CREATE/UPDATE vía
+  NestJS → payload canónico → Strapi → MySQL. Endurecimiento: validación de UUID,
+  UPDATE que distingue 404 (inexistente) de idempotente, y errores MySQL traducidos.
+- **Geocoding OSM** (`GET /company-profile/geocode`): proxy server-side de Nominatim,
+  **solo al pulsar "Buscar"** (no autocomplete), con User-Agent, throttle, timeout y
+  **cache acotado** (TTL 24 h, máx. 200 entradas, clave normalizada).
+- **Admin UI** (`src/admin/app.tsx` + `src/admin/pages/InformacionGeneral.tsx`):
+  menú "Información General" (permiso `read`) con los bloques de correo receptor,
+  teléfonos, correos, redes sociales y ubicación (mapa OSM embebido + botón Buscar).
+  Botones ocultos según permisos (`useRBAC`). Branding/logo/favicon/paleta aplicados
+  (login/menú/tema).
+- Pruebas: `npm run test:server` (31). Verificación de arranque: registra las
+  acciones RBAC y las rutas responden 401 sin admin y 404 en rutas inexistentes.
+
+`CMS_INTERNAL_TOKEN` y `BACKEND_INTERNAL_URL` son **solo de servidor** (verificado:
+no aparecen en el bundle del Admin).
 
 ## Scripts
 
@@ -82,6 +114,7 @@ npm install       # instalar dependencias
 npm run develop   # desarrollo con recarga (crea el primer admin en el primer arranque)
 npm run build     # compilar el panel de administración
 npm run start     # ejecutar en producción (requiere build previo)
+npm run test:server  # tests unitarios de la lógica server-side de CompanyProfile
 ```
 
 ## Despliegue objetivo — Hostinger Business (managed Node)
@@ -115,8 +148,10 @@ validarla. Ver `docs/ROADMAP.md` (Fase 5).
 
 ## Pendiente para la siguiente fase (no incluido aquí)
 
-- integración administrativa custom Strapi → NestJS (plugin/UI);
-- autenticación service-to-service Strapi → NestJS;
-- branding, logo, favicon y paleta de Cromática Creativa en el admin;
-- formularios administrativos personalizados (Información General, mapa OSM);
-- migración de la UI de CompanyProfile (HU22–HU25) a Strapi.
+- Portfolio y Services (aún sin integración CMS);
+- marcador OSM arrastrable/click-to-set (mejora con react-leaflet); hoy el punto se fija por búsqueda o entrada manual;
+- verificación E2E con un administrador autenticado (click-through completo);
+- storage/operación de multimedia.
+
+La integración de **CompanyProfile / Información General** (server-side, rutas admin,
+UI, OSM, branding, login) está implementada en esta fase (ADR-028).

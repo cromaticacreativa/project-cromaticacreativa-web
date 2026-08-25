@@ -171,6 +171,45 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - Mantener HTML semántico, accesibilidad y diseño responsive.
 - No elegir librerías adicionales sin requisito y aprobación.
 
+## Patrón CRUD administrativo (convención global reutilizable)
+
+Convención OBLIGATORIA para **todos** los CRUD administrativos del CMS: CompanyProfile
+(ya implementado), y los futuros Portfolio, Services y cualquier módulo nuevo. No es
+específica de CompanyProfile.
+
+```text
+GET     : Strapi Server → MySQL directo
+DELETE  : Strapi Server → MySQL directo
+CREATE  : Strapi Server → NestJS (reglas/canonicalización) → payload canónico → Strapi → MySQL
+UPDATE  : Strapi Server → NestJS (reglas/canonicalización) → payload canónico → Strapi → MySQL
+```
+
+Reglas derivadas:
+
+- **GET** nunca crea `QueryHandlers` de NestJS solo por el CMS.
+- **DELETE** nunca crea `DeleteHandlers` de NestJS solo por el CMS.
+- **CREATE** y **UPDATE** siempre pasan por NestJS (Commands/Handlers/Strategies/
+  Validators/Domain).
+- **NestJS no es el escritor administrativo final**: valida/canonicaliza y devuelve
+  el payload canónico; **Strapi** ejecuta la escritura final.
+- **Fail closed**: si NestJS rechaza, cae, hace timeout o responde 5xx en CREATE/
+  UPDATE, **no se escribe nada** en MySQL.
+- **TypeORM migrations** gobiernan el schema; **MySQL** aplica constraints (NOT NULL,
+  UNIQUE, FK, CHECK); Strapi no modela las tablas de negocio como content-types.
+- **RBAC de servidor** en cada ruta admin: `admin::isAuthenticatedAdmin` +
+  `admin::hasPermissions` con la acción de la operación (read/create/update/delete).
+  La barrera es de servidor; la UI solo oculta/inhabilita acciones (UX).
+- **Concurrencia**: un UPDATE que afecta 0 filas se re-verifica por existencia para
+  distinguir "registro eliminado" (404) de "update idempotente" (éxito). Las
+  constraints MySQL siguen siendo la última defensa (se traducen a errores seguros).
+- **Geocoding/servicios externos**: solo por proxy server-side de Strapi, con
+  throttle, User-Agent, timeout y cache acotado; nunca autocomplete por tecla.
+- Los secretos server-to-service (`CMS_INTERNAL_TOKEN`, `BACKEND_INTERNAL_URL`) son
+  **solo de servidor**; nunca en el bundle del Admin ni en el navegador.
+
+Ejemplo de referencia implementado: `infrastructure/CMS/Strapi/src/company-profile/`
+(server) + `src/admin/pages/InformacionGeneral.tsx` (UI). Ver ADR-028.
+
 ## Aplicaciones externas de infraestructura
 
 - Las aplicaciones/herramientas técnicas externas al backend viven bajo `infrastructure/`, no bajo `backend/src/Infrastructure/`.
@@ -192,7 +231,7 @@ Los nombres de migrations usan PascalCase y describen un cambio coherente. Cada 
 - Separar `From` técnico, `To` administrable y `Reply-To` del Cliente.
 - El CMS (Strapi) no participa en el formulario ni se crea una tabla automáticamente.
 - Strapi 5 está incorporado como CMS administrativo, continúa condicionado a la PoC y toda afirmación sobre Hostinger requiere validarla.
-- Flujo objetivo (mediante la futura infraestructura custom de Strapi): GET y DELETE los resuelve Strapi directo a MySQL; CREATE/UPDATE con negocio van Strapi → NestJS Command → payload canónico → Strapi → escritura final. Las TypeORM migrations gobiernan la estructura; NestJS es la autoridad de reglas de negocio, no un CRUD; el mecanismo concreto se implementará en una fase posterior.
+- Flujo CRUD administrativo: ver "Patrón CRUD administrativo (convención global reutilizable)" más arriba. Implementado para CompanyProfile (ADR-028); GET/DELETE directos a MySQL y CREATE/UPDATE vía NestJS. Aplica igual a Portfolio/Services futuros.
 - No almacenar archivos como BLOB/base64 del modelo de Domain; storage sigue pendiente.
 
 ## Tests y documentación

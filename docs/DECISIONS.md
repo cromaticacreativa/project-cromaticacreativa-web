@@ -841,6 +841,62 @@ no se usa `synchronize: true` en ningún caso.
 - No se elimina TypeORM ni se tocan las migrations históricas: se conservan
   registradas e intactas.
 
+## ADR-028 — Autenticación service-to-service Strapi → NestJS y flujo administrativo de CompanyProfile
+
+**Estado:** Aceptada
+
+Implementa el flujo objetivo de ADR-027 para el módulo **CompanyProfile** (solo).
+Retoma el concepto de token técnico de la retirada ADR-023, ahora genérico para el
+CMS (Strapi), no para Directus.
+
+### Contexto
+
+ADR-027 definió el flujo objetivo (GET/DELETE directos de Strapi a MySQL;
+CREATE/UPDATE vía NestJS que valida/canonicaliza y Strapi como escritor final) sin
+implementarlo. Esta fase lo materializa para CompanyProfile.
+
+### Decisión
+
+- **Autenticación técnica:** `CmsServiceAuthGuard` (NestJS) protege
+  `/internal/cms/*` con `Authorization: Bearer <CMS_INTERNAL_TOKEN>`. No autentica
+  personas (eso es de Strapi); es fail closed (sin token configurado, rechaza),
+  compara en tiempo constante y nunca registra ni devuelve el token. El token vive
+  solo en el entorno del backend y del servidor de Strapi; nunca en el navegador.
+- **Frontera interna:** `CompanyProfileCmsController` se re-registra detrás del
+  Guard y expone únicamente CREATE/UPDATE (incluye `initialize`). GET y DELETE los
+  resuelve Strapi directo a MySQL.
+- **Hueco del singleton:** se añade `InicializarCompanyProfileCommand` —único caso
+  de uso que puede crear `company_profile`—; valida el correo receptor con
+  `ValidadoraCorreo`, genera el UUID en Application y devuelve el payload canónico
+  (`id`, `singleton_key`, correo) para que Strapi ejecute el `INSERT`. Rechaza 409
+  si el perfil ya existe. No se inventan datos ni seeds.
+- **Server-side de Strapi:** repositorio (Knex interno, parametrizado; sin
+  content-types), cliente HTTP fail-closed hacia NestJS y servicio de orquestación
+  que escribe **solo** el payload canónico y traduce errores de negocio y de
+  constraints MySQL. Sin doble escritura: en CREATE/UPDATE NestJS no persiste y
+  Strapi escribe una sola vez con el payload aprobado.
+
+### Consecuencias
+
+- CompanyProfile es el primer (y único, en esta fase) módulo con integración CMS.
+  Portfolio y Services siguen pendientes.
+- Backend y Strapi implementados: rutas admin server-side registradas en
+  `src/index.ts` con **RBAC real** por operación (`admin::isAuthenticatedAdmin` +
+  `admin::hasPermissions` sobre `admin::company-profile.{read,create,update,delete}`);
+  acciones registradas en `bootstrap()`. Admin UI "Información General" (5 bloques,
+  botones según permiso vía `useRBAC`), OSM (geocoding server-side con **botón
+  Buscar** —no autocomplete—, cache acotado, proxy con User-Agent/throttle/timeout),
+  branding (logo/favicon/paleta). Endurecimiento: validación de UUID, UPDATE que
+  distingue 404 (inexistente) de idempotente, traducción de errores MySQL. Verificado
+  por `strapi build`, arranque real (RBAC registrado; rutas 401 sin admin, 404
+  inexistentes) y `test:server` (31).
+- Este patrón GET/DELETE directo + CREATE/UPDATE vía NestJS + RBAC de servidor es la
+  **convención global** para todo CRUD administrativo futuro (ver `docs/CONVENTIONS.md`).
+- Pendiente: marcador OSM arrastrable (react-leaflet), E2E autenticado por navegador
+  y RBAC con rol limitado (requiere credenciales de admin), y Portfolio/Services.
+- No se introduce login administrativo en NestJS ni content-types de negocio en
+  Strapi; TypeORM migrations siguen gobernando el schema (ADR-027).
+
 ## Cómo registrar una decisión futura
 
 Una nueva ADR debe utilizar el siguiente número secuencial y contener título, estado, Contexto, Decisión y Consecuencias. Las decisiones reemplazadas se conservan y enlazan con su sucesora; no se reescribe el historial para ocultar cambios.

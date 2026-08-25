@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CmsServiceAuthGuard } from '../../Infrastructure/Security/CmsServiceAuthGuard';
 import { AgregarInformacionDeContactoCommandHandler } from './CompanyProfile.Application/Commands/AgregarInformacionDeContacto/AgregarInformacionDeContactoCommandHandler';
 import { AgregarUbicacionCommandHandler } from './CompanyProfile.Application/Commands/AgregarUbicacion/AgregarUbicacionCommandHandler';
+import { InicializarCompanyProfileCommandHandler } from './CompanyProfile.Application/Commands/InicializarCompanyProfile/InicializarCompanyProfileCommandHandler';
 import { ModificarInformacionDeContactoCommandHandler } from './CompanyProfile.Application/Commands/ModificarInformacionDeContacto/ModificarInformacionDeContactoCommandHandler';
 import { ModificarUbicacionCommandHandler } from './CompanyProfile.Application/Commands/ModificarUbicacion/ModificarUbicacionCommandHandler';
 import { AgregarCorreoStrategy } from './CompanyProfile.Application/Strategies/AgregarCorreoStrategy';
@@ -20,22 +22,23 @@ import { ValidadoraCorreo } from './CompanyProfile.Application/Validations/Valid
 import { ValidadoraRedSocial } from './CompanyProfile.Application/Validations/ValidadoraRedSocial';
 import { companyProfilePersistenceModels } from './CompanyProfile.Infrastructure/Persistence/Configurations/CompanyProfilePersistenceConfiguration';
 import { CompanyProfileStateReader } from './CompanyProfile.Infrastructure/Adapters/CompanyProfileStateReader';
+import { CompanyProfileCmsController } from './CompanyProfile.Presentation/Controllers/CompanyProfileCmsController';
 
 /**
  * Módulo de CompanyProfile.
  *
- * La lógica de negocio administrativa (Commands, Handlers, Strategies,
- * Validadoras y el puerto de lectura) permanece registrada y compilable. La
- * frontera HTTP interna `CompanyProfileCmsController` NO se registra en esta
- * fase: la integración administrativa migró de Directus a Strapi y la
- * autenticación service-to-service Strapi → NestJS se implementará en una tarea
- * posterior. Hasta entonces el controller no se expone sin protección. El
- * archivo del controller se conserva como código de migración desacoplado del
- * CMS anterior.
+ * La frontera HTTP interna `CompanyProfileCmsController` (`/internal/cms/company-profile/*`)
+ * está registrada y protegida por `CmsServiceAuthGuard` (token técnico
+ * service-to-service Strapi → NestJS). Solo expone CREATE/UPDATE administrativos;
+ * GET y DELETE los resuelve Strapi directo a MySQL. NestJS es la autoridad de
+ * reglas de negocio y devuelve el payload canónico; Strapi ejecuta la escritura
+ * final. Las TypeORM migrations gobiernan el schema de negocio (ADR-027).
  */
 @Module({
   imports: [TypeOrmModule.forFeature(companyProfilePersistenceModels)],
+  controllers: [CompanyProfileCmsController],
   providers: [
+    CmsServiceAuthGuard,
     ValidadoraTelefono,
     ValidadoraCorreo,
     ValidadoraRedSocial,
@@ -74,6 +77,7 @@ import { CompanyProfileStateReader } from './CompanyProfile.Infrastructure/Adapt
     AgregarUbicacionCommandHandler,
     ModificarInformacionDeContactoCommandHandler,
     ModificarUbicacionCommandHandler,
+    InicializarCompanyProfileCommandHandler,
     // El mismo adaptador cubre ambos puertos de lectura (estado + valor actual por id).
     CompanyProfileStateReader,
     { provide: COMPANY_PROFILE_STATE_READER, useExisting: CompanyProfileStateReader },

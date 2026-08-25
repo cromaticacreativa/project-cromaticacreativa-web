@@ -39,6 +39,8 @@
     // Do not include test files
     "**/*.test.*",
     // Do not include plugins in the server compilation
-    "src/plugins/**"
+    "src/plugins/**",
+    // Test helpers/tests for CompanyProfile server logic (compiled by tsconfig.plugin.json)
+    "src/company-profile/server/__tests__/"
   ]
 }

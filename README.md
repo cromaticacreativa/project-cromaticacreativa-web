@@ -236,15 +236,16 @@ No se fijan versiones distintas de Node.js 22 hasta que una implementación real
 
 ## Endpoints
 
-No hay endpoints públicos ni rutas activas. La lógica de HU22–HU25 vive en la frontera HTTP interna `CompanyProfileCmsController` (`/internal/cms/company-profile/*`), pero tras retirar Directus **no está registrada** en `CompanyProfileModule`: la autenticación service-to-service (CMS → NestJS) y su re-registro se implementarán junto con la integración de Strapi. Ninguna capa Domain/Application queda acoplada al CMS.
+No hay endpoints públicos. La frontera HTTP **interna** administrativa `CompanyProfileCmsController` (`/internal/cms/company-profile/*`) está **registrada y protegida** por `CmsServiceAuthGuard` (token técnico `Bearer CMS_INTERNAL_TOKEN`, service-to-service; no autentica personas). Solo cubre CREATE/UPDATE; GET y DELETE los resuelve Strapi directo a MySQL. La consume únicamente el servidor de Strapi, nunca el navegador (ADR-028).
 
 | Método | Endpoint (frontera interna) | Módulo | Estado |
 | --- | --- | --- | --- |
-| POST | `/internal/cms/company-profile/contact-information` | CompanyProfile | Lógica lista (HU22); no registrado |
-| POST | `/internal/cms/company-profile/location` | CompanyProfile | Lógica lista (HU24); no registrado |
-| POST | `/internal/cms/company-profile/contact-request-recipient-email` | CompanyProfile | Lógica lista (`AgregarInformacionDeContactoCommand` + Strategy); no registrado |
-| POST | `/internal/cms/company-profile/contact-information/modify` | CompanyProfile | Lógica lista (HU23); no registrado |
-| POST | `/internal/cms/company-profile/location/modify` | CompanyProfile | Lógica lista (HU25); no registrado |
+| POST | `/internal/cms/company-profile/initialize` | CompanyProfile | Implementado (crea el singleton) |
+| POST | `/internal/cms/company-profile/contact-information` | CompanyProfile | Implementado (HU22) |
+| POST | `/internal/cms/company-profile/contact-information/modify` | CompanyProfile | Implementado (HU23) |
+| POST | `/internal/cms/company-profile/location` | CompanyProfile | Implementado (HU24) |
+| POST | `/internal/cms/company-profile/location/modify` | CompanyProfile | Implementado (HU25) |
+| POST | `/internal/cms/company-profile/contact-request-recipient-email` | CompanyProfile | Implementado |
 
 El catálogo completo se mantiene en [docs/ENDPOINTS.md](docs/ENDPOINTS.md).
 

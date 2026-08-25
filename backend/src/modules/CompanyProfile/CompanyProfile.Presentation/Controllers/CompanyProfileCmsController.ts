@@ -6,12 +6,15 @@ import {
   HttpException,
   Post,
   UnprocessableEntityException,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
+import { CmsServiceAuthGuard } from '../../../../Infrastructure/Security/CmsServiceAuthGuard';
 import {
   IResultadoCorreoReceptor,
   IResultadoInformacionDeContactoOrdenado,
 } from '../../CompanyProfile.Application/Ports/IResultadoInformacionDeContacto';
+import { IResultadoInicializacion } from '../../CompanyProfile.Application/Ports/IResultadoInicializacion';
 import { IResultadoUbicacion } from '../../CompanyProfile.Application/Ports/IResultadoUbicacion';
 import { IValidationError } from '../../CompanyProfile.Application/Ports/IValidationError';
 import { InformacionDeContactoRechazadaException } from '../../CompanyProfile.Application/Exceptions/InformacionDeContactoRechazadaException';
@@ -33,6 +36,9 @@ import { ModificarUbicacionMapper } from '../Mappers/ModificarUbicacionMapper';
 import { ModificarInformacionDeContactoRequestDto } from '../DTOs/ModificarInformacionDeContactoRequestDto';
 import { ModificarUbicacionRequestDto } from '../DTOs/ModificarUbicacionRequestDto';
 import { IResultadoInformacionDeContacto } from '../../CompanyProfile.Application/Ports/IResultadoInformacionDeContacto';
+import { InicializarCompanyProfileMapper } from '../Mappers/InicializarCompanyProfileMapper';
+import { InicializarCompanyProfileRequestDto } from '../DTOs/InicializarCompanyProfileRequestDto';
+import { InicializarCompanyProfileResponseDto } from '../DTOs/InicializarCompanyProfileResponseDto';
 
 /**
  * Traduce el vocabulario del caso de uso al nombre de columna de negocio que
@@ -72,18 +78,46 @@ type RechazoDeNegocio = InformacionDeContactoRechazadaException | UbicacionRecha
  * conflicto de estado (duplicado / ubicación existente) y 422 para validación de
  * entrada. No se filtran clases, stack, SQL ni secretos.
  *
+ * Solo cubre CREATE/UPDATE administrativos. GET y DELETE los resuelve el CMS
+ * (Strapi) directamente contra MySQL y no pasan por aquí.
+ *
+ * - `initialize`: crea el singleton `company_profile` cuando no existe.
  * - `contact-information` (HU22): agrega teléfono, correo o red social.
+ * - `contact-information/modify` (HU23): modifica teléfono, correo o red social.
  * - `location` (HU24): agrega la ubicación de la empresa.
+ * - `location/modify` (HU25): modifica la ubicación.
  * - `contact-request-recipient-email`: cambia el correo receptor del Aggregate.
  *
- * NOTA DE MIGRACIÓN: este controller no está registrado en `CompanyProfileModule`
- * en esta fase. La integración administrativa pasó de Directus a Strapi; la
- * autenticación service-to-service Strapi → NestJS y el re-registro de esta
- * frontera se implementarán en una tarea posterior. No se expone sin protección.
+ * Protegido por `CmsServiceAuthGuard` (token técnico `Bearer CMS_INTERNAL_TOKEN`,
+ * service-to-service; no autentica personas). Está registrado en
+ * `CompanyProfileModule` detrás de ese Guard.
  */
 @Controller('internal/cms/company-profile')
+@UseGuards(CmsServiceAuthGuard)
 export class CompanyProfileCmsController {
   public constructor(private readonly commandBus: CommandBus) {}
+
+  /**
+   * Inicializa el singleton `company_profile` cuando no existe, con su único campo
+   * obligatorio (correo receptor). Si ya existe, responde 409. El CMS ejecuta el
+   * `INSERT` final con el payload canónico devuelto.
+   */
+  @Post('initialize')
+  @HttpCode(200)
+  public async inicializar(
+    @Body() dto: InicializarCompanyProfileRequestDto,
+  ): Promise<InicializarCompanyProfileResponseDto> {
+    const command = InicializarCompanyProfileMapper.toCommand(dto);
+    try {
+      const resultado = await this.commandBus.execute<typeof command, IResultadoInicializacion>(command);
+      return InicializarCompanyProfileMapper.toResponse(resultado);
+    } catch (error) {
+      if (error instanceof InformacionDeContactoRechazadaException) {
+        throw this.aHttp(error, CAMPO_A_COLUMNA_CORREO_RECEPTOR);
+      }
+      throw error;
+    }
+  }
 
   @Post('contact-information')
   @HttpCode(200)

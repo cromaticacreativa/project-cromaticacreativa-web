@@ -4,7 +4,7 @@ Esta guía describe el desarrollo sobre la fundación Node.js/NestJS activa.
 
 ## Estado del entorno y transición
 
-El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. **Strapi 5** es el CMS administrativo, incorporado en `infrastructure/CMS/Strapi/` como aplicación Node independiente que comparte **la misma base MySQL** del backend pero gobierna solo sus tablas internas; las **TypeORM migrations** (registradas, `synchronize: false`) son la autoridad estructural de las tablas de negocio (ADR-025 y ADR-027). Directus fue retirado. HU22–HU25 son los primeros casos de uso Application reales de CompanyProfile y su lógica permanece intacta; su frontera HTTP interna (`/internal/cms/company-profile/*`) existe pero **no está registrada** en esta fase, pendiente de la integración con Strapi. No existen todavía endpoints públicos. El frontend no está implementado.
+El backend posee `package.json` y `package-lock.json`. NestJS, `@nestjs/cqrs`, TypeORM/MySQL, Domain TypeScript y tests están configurados. **Strapi 5** es el CMS administrativo, incorporado en `infrastructure/CMS/Strapi/` como aplicación Node independiente que comparte **la misma base MySQL** del backend pero gobierna solo sus tablas internas; las **TypeORM migrations** (registradas, `synchronize: false`) son la autoridad estructural de las tablas de negocio (ADR-025 y ADR-027). Directus fue retirado. HU22–HU25 son los primeros casos de uso Application reales de CompanyProfile; su frontera HTTP interna (`/internal/cms/company-profile/*`) está **registrada y protegida** por `CmsServiceAuthGuard` (token técnico service-to-service) e incluye `initialize` para crear el singleton (ADR-028). No existen endpoints públicos. El frontend no está implementado.
 
 La implementación .NET/EF/PostgreSQL anterior fue retirada después de comprobar la equivalencia y solo permanece en Git/ADRs históricas.
 
@@ -130,26 +130,30 @@ validaciones de negocio (por ejemplo `ICompanyProfileStateReader`).
 
 Para CompanyProfile, mapear colecciones Domain sin IDs a filas técnicas: phone, email y social_link conservan UUID de Infrastructure cuando persiste el mismo valor lógico; location usa `company_profile_id` como PK/FK. WhatsApp se modela como SocialLink. El destinatario interno vive en `company_profile` y nunca se mezcla automáticamente con los emails públicos.
 
-## CREATE/UPDATE administrativos y el CMS (Strapi)
+## CREATE/UPDATE administrativos y el CMS (Strapi) — CompanyProfile (ADR-028)
 
-Patrón objetivo de un CREATE o UPDATE administrativo de negocio (integración con
-Strapi **pendiente**, ADR-025):
+Para **CompanyProfile** la integración administrativa ya está implementada a nivel
+backend y de lógica server-side de Strapi (ADR-028). Patrón de un CREATE/UPDATE:
 
 1. El Administrador edita en Strapi Admin.
-2. Una integración/plugin custom de Strapi (futura) llama a un endpoint interno NestJS autenticado.
-3. Request DTO → Command → `CommandBus` → Handler.
-4. Lectura opcional mediante port/TypeORM.
-5. Ejecución de Domain.
-6. Error o payload canónico.
-7. Escritura final única (mecanismo a definir con Strapi).
-8. Prueba explícita de ausencia de doble escritura.
+2. El **servidor** de Strapi llama al endpoint interno de NestJS con
+   `Authorization: Bearer <CMS_INTERNAL_TOKEN>` (`CmsServiceAuthGuard`, fail closed).
+3. Request DTO → Command → `CommandBus` → Handler → Validators/Strategy/Domain.
+4. NestJS devuelve error (409/422 con `errors[]`) o el **payload canónico**.
+5. Fail closed: si NestJS rechaza/cae/timeout, Strapi **no** escribe.
+6. Strapi escribe **una sola vez** el payload canónico en MySQL (escritor final).
 
-En esta fase **no** existe la integración visual/custom Strapi → NestJS, ni la
-autenticación service-to-service, ni el re-registro de la frontera interna. NestJS
-sigue siendo la autoridad de reglas de negocio; las TypeORM migrations gobiernan el
-schema de las tablas de negocio; Strapi es el CMS administrativo (auth + sus tablas
-internas) y accederá a los datos de negocio mediante infraestructura custom en una
-fase posterior. No introducir un login propio en NestJS.
+GET y DELETE los resuelve el servidor de Strapi directo a MySQL (no pasan por
+NestJS). `CompanyProfileCmsController` está registrado en `CompanyProfileModule`
+detrás de `CmsServiceAuthGuard` e incluye `POST .../initialize` para crear el
+singleton `company_profile` cuando no existe. NestJS es la autoridad de reglas de
+negocio; las TypeORM migrations gobiernan el schema; Strapi es el escritor final y
+dueño solo de sus tablas internas. No hay login administrativo en NestJS.
+
+Lógica server-side de Strapi: `infrastructure/CMS/Strapi/src/company-profile/server/`
+(repositorio Knex, cliente NestJS fail-closed, servicio de orquestación), con rutas
+admin registradas en `src/index.ts` y Admin UI en `src/admin/` (Información General,
+OSM, branding). Pendiente: marcador OSM arrastrable y E2E con admin autenticado.
 
 ## Lógica de negocio de CompanyProfile (HU22–HU25) — conservada
 

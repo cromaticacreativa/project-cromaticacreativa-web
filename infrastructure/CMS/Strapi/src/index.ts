@@ -1,20 +1,20 @@
-// import type { Core } from '@strapi/strapi';
+import type { Core } from '@strapi/strapi';
+import { registerCompanyProfile, registerCompanyProfilePermissions } from './company-profile/register';
 
 export default {
   /**
-   * An asynchronous register function that runs before
-   * your application is initialized.
-   *
-   * This gives you an opportunity to extend code.
+   * Se ejecuta antes de inicializar la aplicación. Registra las rutas admin
+   * server-side de CompanyProfile (Información General).
    */
-  register(/* { strapi }: { strapi: Core.Strapi } */) {},
+  register({ strapi }: { strapi: Core.Strapi }) {
+    registerCompanyProfile(strapi);
+  },
 
   /**
-   * An asynchronous bootstrap function that runs before
-   * your application gets started.
-   *
-   * This gives you an opportunity to set up your data model,
-   * run jobs, or perform some special logic.
+   * Se ejecuta antes de arrancar. Registra (best-effort) las acciones de permiso
+   * admin de CompanyProfile para roles limitados futuros.
    */
-  bootstrap(/* { strapi }: { strapi: Core.Strapi } */) {},
+  async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    await registerCompanyProfilePermissions(strapi);
+  },
 };
